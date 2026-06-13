@@ -33,6 +33,8 @@ The following files are RTAAL-1.1-only:
 - `bpd/lib/transform_attnres.pl` — the Attention-Residuals model transformation
 - `bpd/lib/transform_turboquant.pl` — the TurboQuant model transformation
 - `bpd/lib/cost_naming.pl` — the transform/meta nomenclature
+- `bpd/lib/transform_bridge.pl` — role-based model_transform(Model, Strategy): the dataflow role inference + transform application
+- `bpd/lib/gguf_to_graph.py` — derives a model compute graph from a live GGUF (the map source)
 
 SPDX identifier on these files:
 
