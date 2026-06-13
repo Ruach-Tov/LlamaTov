@@ -1,0 +1,100 @@
+{"id": "factual_short_00", "prompt": "What is the capital of France?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_01", "prompt": "Name three primary colors.", "category": "factual", "len_class": "short"}
+{"id": "factual_short_02", "prompt": "What is 17 times 23?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_03", "prompt": "Define photosynthesis in one sentence.", "category": "factual", "len_class": "short"}
+{"id": "factual_short_04", "prompt": "What year did World War II end?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_05", "prompt": "List the planets in order from the sun.", "category": "factual", "len_class": "short"}
+{"id": "factual_short_06", "prompt": "What is the chemical symbol for gold?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_07", "prompt": "Translate 'hello' to Spanish.", "category": "factual", "len_class": "short"}
+{"id": "factual_short_08", "prompt": "What is the speed of light?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_09", "prompt": "Who wrote Romeo and Juliet?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_10", "prompt": "What is the boiling point of water in Celsius?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_11", "prompt": "Name the largest ocean on Earth.", "category": "factual", "len_class": "short"}
+{"id": "code_short_00", "prompt": "Write a Python function to reverse a string.", "category": "code", "len_class": "short"}
+{"id": "code_short_01", "prompt": "Write a one-line bash command to count files in a directory.", "category": "code", "len_class": "short"}
+{"id": "code_short_02", "prompt": "What does the SQL JOIN keyword do?", "category": "code", "len_class": "short"}
+{"id": "code_short_03", "prompt": "Write a regex to match an email address.", "category": "code", "len_class": "short"}
+{"id": "code_short_04", "prompt": "Explain what a hash map is.", "category": "code", "len_class": "short"}
+{"id": "code_short_05", "prompt": "Write a function to check if a number is prime.", "category": "code", "len_class": "short"}
+{"id": "explain_medium_00", "prompt": "Explain how a neural network learns through backpropagation.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_01", "prompt": "Describe the differences between TCP and UDP protocols.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_02", "prompt": "Write a short story about a robot who discovers music.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_03", "prompt": "Explain the theory of relativity to a high school student.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_04", "prompt": "Compare and contrast functional and object-oriented programming.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_05", "prompt": "Describe the water cycle and its importance to life on Earth.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_06", "prompt": "Explain how vaccines work to build immunity.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_07", "prompt": "Write a haiku about autumn, then explain its structure.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_08", "prompt": "Describe the process of cellular respiration step by step.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_09", "prompt": "Explain the concept of supply and demand in economics.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_10", "prompt": "Write a recipe for a simple vegetable soup.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_11", "prompt": "Describe how a computer's CPU executes instructions.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_12", "prompt": "Explain the causes of the French Revolution.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_13", "prompt": "Describe the lifecycle of a star from birth to death.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_14", "prompt": "Explain how blockchain technology achieves consensus.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_15", "prompt": "Write instructions for changing a flat tire.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_16", "prompt": "Describe the major branches of philosophy.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_17", "prompt": "Explain how the human immune system fights infection.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_18", "prompt": "Compare the architectures of CPUs and GPUs.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_19", "prompt": "Describe the greenhouse effect and climate change.", "category": "explain", "len_class": "medium"}
+{"id": "reasoning_medium_00", "prompt": "If a train travels 60 mph for 2.5 hours, how far does it go? Show your reasoning.", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_01", "prompt": "A farmer has chickens and cows totaling 30 animals and 74 legs. How many of each?", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_02", "prompt": "Explain the Monty Hall problem and why switching doors helps.", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_03", "prompt": "If all roses are flowers and some flowers fade quickly, can we conclude some roses fade quickly?", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_04", "prompt": "Solve: a bat and ball cost $1.10 together, the bat costs $1 more than the ball. How much is the ball?", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_05", "prompt": "Walk through the steps to sort the list [5,2,8,1,9] using merge sort.", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_06", "prompt": "If today is Wednesday, what day will it be in 100 days? Explain.", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_07", "prompt": "Explain why the sky appears blue during the day.", "category": "reasoning", "len_class": "medium"}
+{"id": "longform_long_00", "prompt": "Write a detailed essay on the history and impact of the printing press on European society, covering its invention, spread, and effects on literacy, religion, and science.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_01", "prompt": "Explain in depth how the TCP/IP networking stack works, from the physical layer up to the application layer, describing each layer's responsibilities and key protocols.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_02", "prompt": "Write a comprehensive tutorial on building a REST API in Python, including routing, request handling, database integration, authentication, and error handling.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_03", "prompt": "Describe the complete process of how a modern compiler transforms source code into executable machine code, covering lexing, parsing, semantic analysis, optimization, and code generation.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_04", "prompt": "Write a long-form analysis of the causes, key events, and lasting consequences of the Industrial Revolution in Britain.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_05", "prompt": "Explain the fundamentals of quantum mechanics, including wave-particle duality, the uncertainty principle, superposition, and entanglement, with intuitive examples.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_06", "prompt": "Write a detailed guide to training a machine learning model from scratch: data collection, preprocessing, feature engineering, model selection, training, evaluation, and deployment.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_07", "prompt": "Compose a thorough explanation of how the human brain processes visual information, from the retina through the visual cortex to higher-order interpretation.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_08", "prompt": "Write an extended story about an explorer who finds an ancient library containing all the world's lost knowledge, and the choices they must make.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_09", "prompt": "Explain the complete lifecycle of a software project using agile methodology, covering planning, sprints, standups, reviews, retrospectives, and continuous deployment.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_10", "prompt": "Describe in detail how modern GPUs achieve parallelism, covering SIMD execution, warps/wavefronts, memory hierarchy, and why they excel at matrix operations.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_11", "prompt": "Write a comprehensive overview of the major programming paradigms \u2014 imperative, functional, object-oriented, logic, and concurrent \u2014 with examples and trade-offs.", "category": "longform", "len_class": "long"}
+{"id": "edge_varied_00", "prompt": "Count from 1 to 50.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_01", "prompt": "Repeat the word 'echo' exactly 20 times.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_02", "prompt": "List the first 30 prime numbers.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_03", "prompt": "Write out the alphabet, then write it backwards.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_04", "prompt": "Generate a sequence: 2, 4, 8, 16, ... continue for 15 terms.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_05", "prompt": "Write the numbers 1 through 20 in both digits and English words.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_06", "prompt": "Output this JSON structure for a user with name, age, email, and address fields.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_07", "prompt": "Write a multiplication table from 1 to 12.", "category": "edge", "len_class": "varied"}
+{"id": "multilingual_medium_00", "prompt": "Write a paragraph in French about your favorite season.", "category": "multilingual", "len_class": "medium"}
+{"id": "multilingual_medium_01", "prompt": "Translate the following to German: 'The quick brown fox jumps over the lazy dog.'", "category": "multilingual", "len_class": "medium"}
+{"id": "multilingual_medium_02", "prompt": "Write a short poem in Spanish about the ocean.", "category": "multilingual", "len_class": "medium"}
+{"id": "multilingual_medium_03", "prompt": "Explain the concept of 'umami' and its origins in Japanese cuisine.", "category": "multilingual", "len_class": "medium"}
+{"id": "factual_short_12", "prompt": "What is the largest mammal on Earth?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_13", "prompt": "How many continents are there?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_14", "prompt": "What is the freezing point of water in Fahrenheit?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_15", "prompt": "Who painted the Mona Lisa?", "category": "factual", "len_class": "short"}
+{"id": "factual_short_16", "prompt": "What is the square root of 144?", "category": "factual", "len_class": "short"}
+{"id": "code_short_06", "prompt": "Write a Python list comprehension to square numbers 1 to 10.", "category": "code", "len_class": "short"}
+{"id": "code_short_07", "prompt": "What is the difference between == and === in JavaScript?", "category": "code", "len_class": "short"}
+{"id": "code_short_08", "prompt": "Write a function to compute the factorial of n.", "category": "code", "len_class": "short"}
+{"id": "code_short_09", "prompt": "Explain what a closure is in programming.", "category": "code", "len_class": "short"}
+{"id": "explain_medium_20", "prompt": "Explain how garbage collection works in managed languages.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_21", "prompt": "Describe the differences between SQL and NoSQL databases.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_22", "prompt": "Explain the concept of recursion with a concrete example.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_23", "prompt": "Describe how DNS resolves a domain name to an IP address.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_24", "prompt": "Explain the difference between processes and threads.", "category": "explain", "len_class": "medium"}
+{"id": "explain_medium_25", "prompt": "Describe how public-key cryptography enables secure communication.", "category": "explain", "len_class": "medium"}
+{"id": "reasoning_medium_08", "prompt": "Three friends split a bill of $90 evenly, then one pays an extra $5 tip. What did each pay?", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_09", "prompt": "If it takes 5 machines 5 minutes to make 5 widgets, how long for 100 machines to make 100 widgets?", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_10", "prompt": "A clock shows 3:15. What is the angle between the hour and minute hands?", "category": "reasoning", "len_class": "medium"}
+{"id": "reasoning_medium_11", "prompt": "You have a 3-liter and a 5-liter jug. How do you measure exactly 4 liters?", "category": "reasoning", "len_class": "medium"}
+{"id": "longform_long_12", "prompt": "Write a comprehensive explanation of how modern search engines crawl, index, and rank web pages, including the role of relevance signals and link analysis.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_13", "prompt": "Describe the full journey of an HTTP request from typing a URL in a browser to rendering the page, covering DNS, TCP, TLS, HTTP, and rendering.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_14", "prompt": "Write a detailed history of the development of the internet from ARPANET to the modern web, highlighting key milestones and technologies.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_15", "prompt": "Explain the principles of thermodynamics, covering all four laws with intuitive examples and real-world applications.", "category": "longform", "len_class": "long"}
+{"id": "longform_long_16", "prompt": "Write an in-depth guide to data structures, covering arrays, linked lists, trees, graphs, hash tables, and their time/space trade-offs.", "category": "longform", "len_class": "long"}
+{"id": "edge_varied_08", "prompt": "Write the Fibonacci sequence up to the 20th term.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_09", "prompt": "Output the numbers 100 down to 80 in descending order.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_10", "prompt": "Spell out PYTHON with each letter on its own line.", "category": "edge", "len_class": "varied"}
+{"id": "edge_varied_11", "prompt": "List every month of the year with its number of days.", "category": "edge", "len_class": "varied"}
+{"id": "multilingual_medium_04", "prompt": "Write a brief greeting in five different languages and identify each.", "category": "multilingual", "len_class": "medium"}
+{"id": "multilingual_medium_05", "prompt": "Explain the difference between ser and estar in Spanish.", "category": "multilingual", "len_class": "medium"}

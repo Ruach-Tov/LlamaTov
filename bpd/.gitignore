@@ -1,0 +1,10 @@
+# Curriculum log — empirical measurement records, accumulated by CI.
+# Substrate evolution tracking; persisted via CI artifact storage,
+# not version control. Each line is one (kernel, size, contract,
+# actual_ULP, bound) record.
+tests/ulp_measurements.jsonl
+
+# Pytest cache and __pycache__
+__pycache__/
+*.pyc
+.pytest_cache/

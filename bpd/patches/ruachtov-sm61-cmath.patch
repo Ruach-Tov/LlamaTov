@@ -1,0 +1,307 @@
+diff --git a/crates/dialect-mir/src/rust_intrinsics.rs b/crates/dialect-mir/src/rust_intrinsics.rs
+index 61e5df7..5663c7d 100644
+--- a/crates/dialect-mir/src/rust_intrinsics.rs
++++ b/crates/dialect-mir/src/rust_intrinsics.rs
+@@ -123,3 +123,40 @@ pub const CALLEE_FABS: &str = placeholder!("fabs");
+ pub const CALLEE_COPYSIGN_F32: &str = placeholder!("copysignf32");
+ /// Placeholder call used for `core::intrinsics::copysignf64`.
+ pub const CALLEE_COPYSIGN_F64: &str = placeholder!("copysignf64");
++
++// ═══ cmath transcendental functions (Ruach Tov sm_61 patch) ═══
++// These placeholders enable tanhf, sinhf, coshf, asinf, acosf, atanf, atan2f, erff
++// to be lowered to __nv_* libdevice calls on ALL sm architectures.
++
++/// Placeholder for std::sys::cmath::tanhf / core::intrinsics::tanhf32
++pub const CALLEE_TANH_F32: &str = placeholder!("tanhf32");
++/// Placeholder for std::sys::cmath::tanh / core::intrinsics::tanhf64
++pub const CALLEE_TANH_F64: &str = placeholder!("tanhf64");
++/// Placeholder for std::sys::cmath::sinhf
++pub const CALLEE_SINH_F32: &str = placeholder!("sinhf32");
++/// Placeholder for std::sys::cmath::sinh
++pub const CALLEE_SINH_F64: &str = placeholder!("sinhf64");
++/// Placeholder for std::sys::cmath::coshf
++pub const CALLEE_COSH_F32: &str = placeholder!("coshf32");
++/// Placeholder for std::sys::cmath::cosh
++pub const CALLEE_COSH_F64: &str = placeholder!("coshf64");
++/// Placeholder for std::sys::cmath::asinf
++pub const CALLEE_ASIN_F32: &str = placeholder!("asinf32");
++/// Placeholder for std::sys::cmath::asin
++pub const CALLEE_ASIN_F64: &str = placeholder!("asinf64");
++/// Placeholder for std::sys::cmath::acosf
++pub const CALLEE_ACOS_F32: &str = placeholder!("acosf32");
++/// Placeholder for std::sys::cmath::acos
++pub const CALLEE_ACOS_F64: &str = placeholder!("acosf64");
++/// Placeholder for std::sys::cmath::atanf
++pub const CALLEE_ATAN_F32: &str = placeholder!("atanf32");
++/// Placeholder for std::sys::cmath::atan
++pub const CALLEE_ATAN_F64: &str = placeholder!("atanf64");
++/// Placeholder for std::sys::cmath::atan2f
++pub const CALLEE_ATAN2_F32: &str = placeholder!("atan2f32");
++/// Placeholder for std::sys::cmath::atan2
++pub const CALLEE_ATAN2_F64: &str = placeholder!("atan2f64");
++/// Placeholder for std::sys::cmath::erff
++pub const CALLEE_ERF_F32: &str = placeholder!("erff32");
++/// Placeholder for std::sys::cmath::erf
++pub const CALLEE_ERF_F64: &str = placeholder!("erff64");
+diff --git a/crates/mir-importer/src/pipeline.rs b/crates/mir-importer/src/pipeline.rs
+index 535008b..97ada53 100644
+--- a/crates/mir-importer/src/pipeline.rs
++++ b/crates/mir-importer/src/pipeline.rs
+@@ -351,11 +351,11 @@ pub fn run_pipeline(
+     // The example is then expected to feed the `.ll` through the LTOIR
+     // pipeline (compile_ltoir + link_ltoir) and load the resulting cubin.
+     let needs_libdevice = module_uses_libdevice(&ctx, module_op_ptr);
+-    let emit_nvvm_ir = config.emit_nvvm_ir || needs_libdevice;
++    let emit_nvvm_ir = config.emit_nvvm_ir; // Ruach Tov: libdevice no longer forces NVVM IR
+     if needs_libdevice && !config.emit_nvvm_ir && config.verbose {
+         eprintln!(
+             "\n=== Detected CUDA libdevice (`__nv_*`) calls; \
+-             auto-emitting NVVM IR (skip llc) ==="
++             will link libdevice.10.bc before llc ==="
+         );
+     }
+ 
+@@ -370,6 +370,52 @@ pub fn run_pipeline(
+         eprintln!("LLVM IR written to {}", ll_path.display());
+     }
+ 
++    // ── Ruach Tov sm_61 patch: Link libdevice.10.bc before llc ──
++    // When __nv_* calls are present, link libdevice to resolve them,
++    // then optimize to strip unused functions. This produces a
++    // self-contained .ll that llc can compile to PTX on ANY sm arch.
++    if needs_libdevice && !emit_nvvm_ir {
++        if config.verbose {
++            eprintln!("\n=== Linking libdevice.10.bc ===");
++        }
++        let libdevice_path = find_cuda_libdevice()?;
++        let merged_ll = ll_path.with_extension("merged.ll");
++        
++        // llvm-link kernel.ll + libdevice.10.bc
++        let status = std::process::Command::new("llvm-link")
++            .arg(&ll_path)
++            .arg(&libdevice_path)
++            .arg("-S")
++            .arg("-o")
++            .arg(&merged_ll)
++            .status()
++            .map_err(|e| anyhow::anyhow!("llvm-link failed: {}", e))?;
++        if !status.success() {
++            return Err(anyhow::anyhow!("llvm-link exited with error"));
++        }
++        
++        // opt: internalize + dead-code eliminate
++        let opt_ll = ll_path.with_extension("opt.ll");
++        let status = std::process::Command::new("opt")
++            .arg("-passes=internalize,globalopt")
++            .arg("-internalize-public-api-list=kernel")
++            .arg(&merged_ll)
++            .arg("-S")
++            .arg("-o")
++            .arg(&opt_ll)
++            .status()
++            .map_err(|e| anyhow::anyhow!("opt failed: {}", e))?;
++        if !status.success() {
++            return Err(anyhow::anyhow!("opt exited with error"));
++        }
++        
++        // Replace the ll_path with the optimized version for llc
++        std::fs::copy(&opt_ll, &ll_path)?;
++        if config.verbose {
++            eprintln!("\u{2713} libdevice linked and optimized");
++        }
++    }
++
+     // Step 8: Generate PTX or stop at NVVM IR for libNVVM-owned paths.
+     if emit_nvvm_ir {
+         // Skip llc. Return a would-be ptx_path so callers see a stable shape;
+@@ -963,6 +1009,40 @@ impl std::fmt::Display for PipelineError {
+ 
+ impl std::error::Error for PipelineError {}
+ 
++
++/// Find libdevice.10.bc in standard CUDA toolkit locations.
++/// Searches CUDA_PATH, /usr/local/cuda, and nix store paths.
++fn find_cuda_libdevice() -> anyhow::Result<std::path::PathBuf> {
++    let candidates = [
++        // CUDA_PATH environment variable
++        std::env::var("CUDA_PATH").ok().map(|p| {
++            std::path::PathBuf::from(p).join("nvvm/libdevice/libdevice.10.bc")
++        }),
++        // Standard Linux install
++        Some(std::path::PathBuf::from("/usr/local/cuda/nvvm/libdevice/libdevice.10.bc")),
++        // NixOS
++        std::env::var("CUDA_MERGED").ok().map(|p| {
++            std::path::PathBuf::from(p).join("nvvm/libdevice/libdevice.10.bc")
++        }),
++    ];
++    for candidate in candidates.iter().flatten() {
++        if candidate.exists() {
++            return Ok(candidate.clone());
++        }
++    }
++    // Search common nix store paths
++    if let Ok(entries) = std::fs::read_dir("/nix/store") {
++        for entry in entries.flatten() {
++            let path = entry.path().join("nvvm/libdevice/libdevice.10.bc");
++            if path.exists() {
++                return Ok(path);
++            }
++        }
++    }
++    Err(anyhow::anyhow!(
++        "Could not find libdevice.10.bc. Set CUDA_PATH or CUDA_MERGED."
++    ))
++}
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/crates/mir-lower/src/convert/ops/call.rs b/crates/mir-lower/src/convert/ops/call.rs
+index 933b94a..af457ce 100644
+--- a/crates/mir-lower/src/convert/ops/call.rs
++++ b/crates/mir-lower/src/convert/ops/call.rs
+@@ -189,6 +189,23 @@ enum RustFloatMathIntrinsic {
+     Fabs,
+     CopysignF32,
+     CopysignF64,
++    // cmath transcendentals (Ruach Tov sm_61 patch)
++    TanhF32,
++    TanhF64,
++    SinhF32,
++    SinhF64,
++    CoshF32,
++    CoshF64,
++    AsinF32,
++    AsinF64,
++    AcosF32,
++    AcosF64,
++    AtanF32,
++    AtanF64,
++    Atan2F32,
++    Atan2F64,
++    ErfF32,
++    ErfF64,
+ }
+ 
+ impl RustFloatMathIntrinsic {
+@@ -234,6 +251,23 @@ impl RustFloatMathIntrinsic {
+             rust_intrinsics::CALLEE_FABS => Some(Self::Fabs),
+             rust_intrinsics::CALLEE_COPYSIGN_F32 => Some(Self::CopysignF32),
+             rust_intrinsics::CALLEE_COPYSIGN_F64 => Some(Self::CopysignF64),
++            // cmath transcendentals (Ruach Tov sm_61 patch)
++            rust_intrinsics::CALLEE_TANH_F32 => Some(Self::TanhF32),
++            rust_intrinsics::CALLEE_TANH_F64 => Some(Self::TanhF64),
++            rust_intrinsics::CALLEE_SINH_F32 => Some(Self::SinhF32),
++            rust_intrinsics::CALLEE_SINH_F64 => Some(Self::SinhF64),
++            rust_intrinsics::CALLEE_COSH_F32 => Some(Self::CoshF32),
++            rust_intrinsics::CALLEE_COSH_F64 => Some(Self::CoshF64),
++            rust_intrinsics::CALLEE_ASIN_F32 => Some(Self::AsinF32),
++            rust_intrinsics::CALLEE_ASIN_F64 => Some(Self::AsinF64),
++            rust_intrinsics::CALLEE_ACOS_F32 => Some(Self::AcosF32),
++            rust_intrinsics::CALLEE_ACOS_F64 => Some(Self::AcosF64),
++            rust_intrinsics::CALLEE_ATAN_F32 => Some(Self::AtanF32),
++            rust_intrinsics::CALLEE_ATAN_F64 => Some(Self::AtanF64),
++            rust_intrinsics::CALLEE_ATAN2_F32 => Some(Self::Atan2F32),
++            rust_intrinsics::CALLEE_ATAN2_F64 => Some(Self::Atan2F64),
++            rust_intrinsics::CALLEE_ERF_F32 => Some(Self::ErfF32),
++            rust_intrinsics::CALLEE_ERF_F64 => Some(Self::ErfF64),
+             _ => None,
+         }
+     }
+@@ -283,6 +317,23 @@ impl RustFloatMathIntrinsic {
+             Self::Fabs => fabs_libdevice_name(ctx, result_ty, loc),
+             Self::CopysignF32 => Ok("__nv_copysignf"),
+             Self::CopysignF64 => Ok("__nv_copysign"),
++            // cmath transcendentals (Ruach Tov sm_61 patch)
++            Self::TanhF32 => Ok("__nv_tanhf"),
++            Self::TanhF64 => Ok("__nv_tanh"),
++            Self::SinhF32 => Ok("__nv_sinhf"),
++            Self::SinhF64 => Ok("__nv_sinh"),
++            Self::CoshF32 => Ok("__nv_coshf"),
++            Self::CoshF64 => Ok("__nv_cosh"),
++            Self::AsinF32 => Ok("__nv_asinf"),
++            Self::AsinF64 => Ok("__nv_asin"),
++            Self::AcosF32 => Ok("__nv_acosf"),
++            Self::AcosF64 => Ok("__nv_acos"),
++            Self::AtanF32 => Ok("__nv_atanf"),
++            Self::AtanF64 => Ok("__nv_atan"),
++            Self::Atan2F32 => Ok("__nv_atan2f"),
++            Self::Atan2F64 => Ok("__nv_atan2"),
++            Self::ErfF32 => Ok("__nv_erff"),
++            Self::ErfF64 => Ok("__nv_erf"),
+         }
+     }
+ 
+@@ -295,6 +346,8 @@ impl RustFloatMathIntrinsic {
+             | Self::PowfF64
+             | Self::CopysignF32
+             | Self::CopysignF64 => 2,
++            | Self::Atan2F32
++            | Self::Atan2F64 => 2,
+             Self::FmaF32 | Self::FmaF64 | Self::FmuladdF32 | Self::FmuladdF64 => 3,
+             _ => 1,
+         }
+diff --git a/crates/rustc-codegen-cuda/src/collector.rs b/crates/rustc-codegen-cuda/src/collector.rs
+index 22e8268..015e1ca 100644
+--- a/crates/rustc-codegen-cuda/src/collector.rs
++++ b/crates/rustc-codegen-cuda/src/collector.rs
+@@ -131,6 +131,7 @@ use rustc_middle::mir::TerminatorKind;
+ use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
+ use rustc_middle::ty::{Instance, InstanceKind, Ty, TyCtxt, TyKind, TypeVisitableExt, TypingEnv};
+ use std::collections::{HashSet, VecDeque};
++use dialect_mir::rust_intrinsics;
+ 
+ /// Result of checking if a function should be collected for device compilation.
+ #[derive(Debug)]
+@@ -144,6 +145,9 @@ enum CollectDecision {
+     /// Error: function is from a forbidden crate (std, alloc, etc.).
+     /// Device code cannot call these - this is a user error.
+     Forbidden { crate_name: String, fn_path: String },
++    /// Rewrite this call to a placeholder intrinsic (for cmath u2192 libdevice).
++    /// The string is the placeholder function name.
++    RewriteToPlaceholder(String),
+ }
+ 
+ // The prefix constants and substring/extractor helpers used below
+@@ -1011,6 +1015,42 @@ impl<'tcx> DeviceCollector<'tcx> {
+         }
+ 
+         // Forbidden crate: std (OS, I/O, threads) - absolutely can't run on GPU
++
++        // ── cmath transcendental interception (Ruach Tov sm_61 patch) ──
++        // Rust delegates f32::tanh(), f32::sinh(), etc. to std::sys::cmath
++        // via FFI. On GPU, we rewrite these to placeholder intrinsics that
++        // lower to __nv_* libdevice calls. This must happen BEFORE the
++        // "std is FORBIDDEN" check below.
++        if name_str == "std" {
++            let fn_path = self.tcx.def_path_str(def_id);
++            if fn_path.contains("sys::cmath") {
++                // Map cmath function to placeholder intrinsic
++                let fn_name = self.tcx.item_name(def_id);
++                let placeholder = match fn_name.as_str() {
++                    "tanhf" => Some(rust_intrinsics::CALLEE_TANH_F32),
++                    "tanh" => Some(rust_intrinsics::CALLEE_TANH_F64),
++                    "sinhf" => Some(rust_intrinsics::CALLEE_SINH_F32),
++                    "sinh" => Some(rust_intrinsics::CALLEE_SINH_F64),
++                    "coshf" => Some(rust_intrinsics::CALLEE_COSH_F32),
++                    "cosh" => Some(rust_intrinsics::CALLEE_COSH_F64),
++                    "asinf" => Some(rust_intrinsics::CALLEE_ASIN_F32),
++                    "asin" => Some(rust_intrinsics::CALLEE_ASIN_F64),
++                    "acosf" => Some(rust_intrinsics::CALLEE_ACOS_F32),
++                    "acos" => Some(rust_intrinsics::CALLEE_ACOS_F64),
++                    "atanf" => Some(rust_intrinsics::CALLEE_ATAN_F32),
++                    "atan" => Some(rust_intrinsics::CALLEE_ATAN_F64),
++                    "atan2f" => Some(rust_intrinsics::CALLEE_ATAN2_F32),
++                    "atan2" => Some(rust_intrinsics::CALLEE_ATAN2_F64),
++                    "erff" => Some(rust_intrinsics::CALLEE_ERF_F32),
++                    "erf" => Some(rust_intrinsics::CALLEE_ERF_F64),
++                    _ => None,
++                };
++                if let Some(placeholder) = placeholder {
++                    return CollectDecision::RewriteToPlaceholder(placeholder.to_string());
++                }
++                // Fall through to FORBIDDEN for unknown cmath functions
++            }
++        }
+         if name_str == "std" {
+             let fn_path = self.tcx.def_path_str(def_id);
+             return CollectDecision::Forbidden {

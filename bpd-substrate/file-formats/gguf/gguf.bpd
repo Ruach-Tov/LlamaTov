@@ -1,0 +1,398 @@
+# gguf.bpd — GGUF binary file format, declared in Boundary Provenance DSL.
+#
+# Stage 0 (2026-05-03): just the 24-byte fixed header.
+#   bytes  0-3   magic     'GGUF' (0x47 0x47 0x55 0x46)
+#   bytes  4-7   version   uint32 LE, must equal 3
+#   bytes  8-15  tensor_count       uint64 LE
+#   bytes 16-23  metadata_kv_count  uint64 LE
+#
+# Stage 1 (2026-05-04, completed): metadata_kv_section, count-driven
+# repetition of pairs. Section structure and key/type fields declared.
+#
+# Stage 1.5 (2026-05-08, completed): value discriminator added — 13
+# cases for GGUF metadata value types. dispatch/4 replaces the
+# deferred_value placeholder. Array sub-record handles recursive
+# type 9. Tensor info and tensor data sections declared.
+#   Added by: medayek (Claude Opus 4.6, conversation 74)
+#
+# This is the first level-0 BPD declaration. The predicate vocabulary
+# proposed in design/file-formats-as-bpd.md §3 is exercised here for
+# the first time. Tensions encountered during this exercise are noted
+# in design/level-0-vocab-tensions.md for later review during the
+# predicate extraction phase.
+#
+# Reference: https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
+# Reference operational parser: papers/kan-acceleration/gguf_parser.py
+#                               (mavchin, 2026-05-02; hand-written;
+#                               serves as conformance reference)
+#
+# Source atoms used in @cites / @adopts / @provenance:
+#   gguf_v3_spec               — published GGUF v3 spec at ggml-org
+#   mavchin_parser_2026_05_02  — hand-written reference parser
+#   metayen_2026_05_03         — Stage 0 design choices for level-0 BPD
+#   metayen_2026_05_04         — Stage 1 design choices (Shape A, X,
+#                                placeholder dimension)
+#   design_file_formats_as_bpd — the design document at
+#                                design/file-formats-as-bpd.md
+#   design_vocab_tensions      — the tensions log at
+#                                design/level-0-vocab-tensions.md
+
+# ─── Format declaration ──────────────────────────────────────────
+
+# A format is a named binary structure. Every BPD level-0 declaration
+# starts here.
+@cites(gguf_v3_spec, reasoning("GGUF is the binary format defined by ggml-org for storing language model weights with metadata"))
+@provenance(metayen_2026_05_03, reasoning("format/1 is the level-0 BPD entry predicate naming the format being declared"))
+format(:gguf).
+
+# Per-format endianness, declared once. Avoids le_/be_ prefix on
+# every type. Per-field overrides possible via explicit type names
+# (e.g., be_u32) but should be rare for any given format.
+@cites(gguf_v3_spec, reasoning("GGUF v3 uses little-endian byte order for all numeric fields"))
+format_endianness(:gguf, little).
+
+# A format may have multiple sections; the file is the sequence of
+# all sections in declaration order. Stage 0 declares only the header
+# section. Subsequent stages will add metadata_kv_section,
+# tensor_info_section, and tensor_data_section.
+@provenance(design_file_formats_as_bpd, reasoning("level-0 BPD models a format as an ordered sequence of sections; sections are addressable by name and ordered by declaration"))
+format_section(:gguf, :header, order(0)).
+
+# ─── Header section: 24 bytes, fixed-width ───────────────────────
+
+# A section may have its own structural properties. The header is
+# fixed-width which means we can compute its size from the field
+# declarations alone.
+@cites(gguf_v3_spec, reasoning("the GGUF header is a fixed-width 24-byte structure: 4 bytes magic + 4 bytes version + 8 bytes tensor_count + 8 bytes metadata_kv_count"))
+section(:header, fixed_width).
+
+@cites(gguf_v3_spec, reasoning("4 + 4 + 8 + 8 = 24 bytes by the spec"))
+section_size(:header, byte_count(24)).
+
+# Field declarations follow the form:
+#   field(SectionName, FieldName, OffsetInSection, DimensionalType,
+#         Constraints).
+#
+# OffsetInSection is byte_offset relative to section start.
+# DimensionalType is the stack of refinements over a substrate.
+# Constraints is a (possibly empty) list of declarative constraints.
+
+@cites(gguf_v3_spec, reasoning("first 4 bytes of every GGUF file are the magic bytes 'GGUF' (0x47 0x47 0x55 0x46) for format identification"))
+@provenance(metayen_2026_05_03, reasoning("magic_constant is a level-0 BPD dimension specializing bytes(N) to mark format-identification byte sequences; generators may emit format detection logic from this dimensional type"))
+field(:header, :magic,
+      byte_offset(0),
+      magic_constant(bytes(4)),
+      [must_equal(byte_sequence(71, 71, 85, 70))]).
+# 71 71 85 70 = ASCII 'G' 'G' 'U' 'F' (i.e., 0x47 0x47 0x55 0x46).
+# TENSION: the BPD grammar currently admits decimal literals only
+# (per pidret.bpd's note in coreutils/). When hex literal support is
+# added to bpd.lark, restore this to 0x47 0x47 0x55 0x46 for
+# readability. Tracked as deferred grammar extension; see
+# coreutils/pidret.bpd line 53 for context.
+
+@cites(gguf_v3_spec, reasoning("bytes 4..8 hold the format version as a uint32 LE; version 3 is the current published version"))
+@provenance(metayen_2026_05_03, reasoning("format_version is a level-0 dimension over cardinal(u32); supports version-conditional field declarations in future stages"))
+field(:header, :version,
+      byte_offset(4),
+      format_version(cardinal(u32)),
+      [must_equal(3)]).
+# Stage 0 supports only version 3. Versions 1 and 2 are obsolete
+# (version 1 was YAML-based; version 2 was an earlier binary format).
+# Future stages may introduce version-conditional field declarations.
+
+@cites(gguf_v3_spec, reasoning("bytes 8..16 hold the tensor count as a uint64 LE; equals the number of tensor info records in the subsequent tensor_info section"))
+@adopts(mavchin_parser_2026_05_02, reasoning("the 100000 upper bound is a safety check from the hand-written parser, treating implausibly large counts as malformed input rather than allocating unbounded memory"))
+@provenance(metayen_2026_05_03, reasoning("tensor_count is a domain dimension over count(cardinal(u64)); in stage 2 will carry a cross_field constraint linking it to the length of tensor_info_section"))
+field(:header, :tensor_count,
+      byte_offset(8),
+      tensor_count(count(cardinal(u64))),
+      [must_be_lt(100000)]).
+
+@cites(gguf_v3_spec, reasoning("bytes 16..24 hold the metadata key-value pair count as a uint64 LE; equals the number of KV records in the subsequent metadata_kv section"))
+@adopts(mavchin_parser_2026_05_02, reasoning("same 100000 safety bound as tensor_count, by the same reasoning"))
+@provenance(metayen_2026_05_03, reasoning("metadata_kv_count is a domain dimension over count(cardinal(u64)); in stage 1 will carry a cross_field constraint linking it to the length of metadata_kv_section"))
+field(:header, :metadata_kv_count,
+      byte_offset(16),
+      metadata_kv_count(count(cardinal(u64))),
+      [must_be_lt(100000)]).
+
+# ─── Metadata KV section ─────────────────────────────────────────
+#
+# Variable-length section starting immediately after the header.
+# Contains exactly :metadata_kv_count pairs (a count from the header
+# field). Each pair is (key_string, value_type, value).
+#
+# This section is variable_width — its byte size depends on the
+# data, not on a declared section_size/2. The structural_coverage
+# check skips variable_width sections (per tension T-5).
+
+@cites(gguf_v3_spec, reasoning("metadata KV section follows the header and contains metadata_kv_count key-value pairs"))
+@provenance(metayen_2026_05_04, reasoning("Stage 1 introduces format_section/3 with a non-zero order to model sequential section layout"))
+format_section(:gguf, :metadata_kv_section, order(1)).
+
+@provenance(metayen_2026_05_04, reasoning("variable_width is a section property distinguishing fixed-size sections from data-dependent ones; sigma-coverage check applies only to fixed_width"))
+section(:metadata_kv_section, variable_width).
+
+# Tension T-1: count_from references a fully-qualified field reference
+# from another section. See design/level-0-vocab-tensions.md.
+@cites(gguf_v3_spec, reasoning("the number of KV pairs equals the metadata_kv_count value in the header"))
+@provenance(metayen_2026_05_04, reasoning("Shape A: repeated/3 takes section, item record, and a count_from cross-field reference"))
+repeated(:metadata_kv_section,
+         item(:metadata_kv_pair),
+         count_from(field(:header, :metadata_kv_count))).
+
+# ─── metadata_kv_pair record ─────────────────────────────────────
+#
+# Tension T-2: this is a "record" — a sub-structure used as a
+# repetition item. We declare it with section/2 (sections-as-records
+# pattern) without a corresponding format_section/3, so it doesn't
+# appear at the top level. It's variable_width because the key length
+# varies (and the value layout is deferred).
+
+@provenance(metayen_2026_05_04, reasoning("sections-as-records: metadata_kv_pair is declared with section/2 but no format_section/3, so it serves only as a repetition item"))
+section(:metadata_kv_pair, variable_width).
+
+# Pair structure:
+#   key_string:    length-prefixed UTF-8 (length: u64, bytes: u8 × length)
+#   value_type:    u32 enum (0..12)
+#   value:         layout depends on value_type — DEFERRED in Stage 1
+
+@cites(gguf_v3_spec, reasoning("metadata key is a length-prefixed UTF-8 string: 8-byte little-endian length followed by that many UTF-8 bytes"))
+@provenance(metayen_2026_05_04, reasoning("metadata_key is a domain dimension over length_prefixed; the underlying substrate is variable-size"))
+field(:metadata_kv_pair, :key,
+      byte_offset(0),
+      metadata_key(length_prefixed(u64, u8)),
+      []).
+
+# value_type's offset depends on the key length. We declare it as
+# byte_offset(after(:key)) — a relative offset that resolves at
+# parse time once the key length is known. This is the first use of
+# relative offsets in our level-0 vocabulary.
+#
+# Tension: should this be `byte_offset(after(:key))` or
+# `byte_offset(relative_to(:key, end))` or `byte_offset(symbolic)`?
+# We use the simplest readable form for now and add this to the
+# tensions list if it proves awkward.
+@cites(gguf_v3_spec, reasoning("value_type is a uint32 enum identifying which of the 13 GGUF metadata value types follows"))
+@provenance(metayen_2026_05_04, reasoning("metadata_value_type specializes cardinal(u32) for the GGUF metadata-value type discriminator; valid values are 0..12 corresponding to u8, i8, u16, i16, u32, i32, f32, bool, string, array, u64, i64, f64"))
+field(:metadata_kv_pair, :value_type,
+      byte_offset(after(:key)),
+      metadata_value_type(cardinal(u32)),
+      [must_be_in([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])]).
+
+# Stage 1.5: Value discriminator — 13 GGUF metadata value types.
+# Replaces the deferred_value placeholder from Stage 1.
+# The dispatch predicate selects a value layout based on value_type.
+@cites(gguf_v3_spec, reasoning("metadata value layout is determined by the value_type field: 13 types covering integers, floats, bool, string, and array"))
+@provenance(medayek_2026_05_08, reasoning("dispatch/4 replaces deferred_value placeholder; each case maps a type_id to a concrete field layout; array (type 9) delegates to a sub-record"))
+dispatch(:metadata_kv_pair, :value, discriminated_by(:value_type),
+  [case(0,  field(:value, cardinal(u8),    byte_count(1))),
+   case(1,  field(:value, cardinal(i8),    byte_count(1))),
+   case(2,  field(:value, cardinal(u16),   byte_count(2))),
+   case(3,  field(:value, cardinal(i16),   byte_count(2))),
+   case(4,  field(:value, cardinal(u32),   byte_count(4))),
+   case(5,  field(:value, cardinal(i32),   byte_count(4))),
+   case(6,  field(:value, float(f32),      byte_count(4))),
+   case(7,  field(:value, boolean(u8),     byte_count(1))),
+   case(8,  field(:value, metadata_string(length_prefixed(u64, u8)))),
+   case(9,  sub_record(:value, :metadata_array)),
+   case(10, field(:value, cardinal(u64),   byte_count(8))),
+   case(11, field(:value, cardinal(i64),   byte_count(8))),
+   case(12, field(:value, float(f64),      byte_count(8)))]).
+
+# ——— metadata_array sub-record (type 9) ———————————————————————————
+#
+# An array value carries its own type tag and count, then N values
+# of the inner type. The inner type CAN be type 9 again (nested
+# arrays), but GGUF in practice only uses flat arrays (arrays of
+# strings for tokenizer vocab, arrays of float32 for scores).
+#
+# We support one level of nesting; deeper nesting is a deferred
+# capability boundary.
+
+@cites(gguf_v3_spec, reasoning("array metadata value: uint32 element type + uint64 count + count × element"))
+@provenance(medayek_2026_05_08, reasoning("metadata_array is a sub-record with its own type tag and count-driven repetition; inner dispatch reuses the same 13-type table for element layout"))
+section(:metadata_array, variable_width).
+
+field(:metadata_array, :element_type,
+      byte_offset(0),
+      metadata_value_type(cardinal(u32)),
+      [must_be_in([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])]).
+
+field(:metadata_array, :element_count,
+      byte_offset(after(:element_type)),
+      array_element_count(count(cardinal(u64))),
+      [must_be_lt(10000000)]).
+# 10M element safety bound: tokenizer vocabs are typically 30K-250K;
+# 10M would indicate corruption.
+
+@provenance(medayek_2026_05_08, reasoning("array elements are a counted repetition dispatched by element_type; same dispatch table as the outer KV value"))
+repeated(:metadata_array,
+         item(:array_element),
+         count_from(field(:metadata_array, :element_count))).
+
+# Array element dispatch reuses the value type table.
+# Type 9 (nested array) is noted but practically unused in GGUF.
+@provenance(medayek_2026_05_08, reasoning("array element layout reuses the same 13-type dispatch; nested arrays (type 9 inside type 9) are supported structurally but flagged as a capability boundary"))
+dispatch(:array_element, :value, discriminated_by(field(:metadata_array, :element_type)),
+  [case(0,  field(:value, cardinal(u8),    byte_count(1))),
+   case(1,  field(:value, cardinal(i8),    byte_count(1))),
+   case(2,  field(:value, cardinal(u16),   byte_count(2))),
+   case(3,  field(:value, cardinal(i16),   byte_count(2))),
+   case(4,  field(:value, cardinal(u32),   byte_count(4))),
+   case(5,  field(:value, cardinal(i32),   byte_count(4))),
+   case(6,  field(:value, float(f32),      byte_count(4))),
+   case(7,  field(:value, boolean(u8),     byte_count(1))),
+   case(8,  field(:value, metadata_string(length_prefixed(u64, u8)))),
+   case(9,  sub_record(:value, :metadata_array)),
+   case(10, field(:value, cardinal(u64),   byte_count(8))),
+   case(11, field(:value, cardinal(i64),   byte_count(8))),
+   case(12, field(:value, float(f64),      byte_count(8)))]).
+
+# ─── Domain-specific dimension declarations ──────────────────────
+#
+# These dimensions specialize generic dimensions from the middah
+# registry (cardinal, count, etc.) for this format's domain. They
+# inherit the codegen, validation, and topology from their parent
+# dimensions while adding format-specific semantics.
+#
+# TENSION: where should these declarations live? Inline in the
+# format file (as here, for self-containment) or in a separate
+# format-dimensions file? For Stage 0 we keep them inline; the
+# extraction phase will consider whether dimension declarations
+# should live in their own predicate namespace.
+
+@provenance(design_file_formats_as_bpd, reasoning("dimensional refinement chain enables generators to recurse from semantic types through generic wrappers to concrete substrate sizes"))
+dimension(:magic_constant,
+          parent_substrate(bytes),
+          description("a fixed byte sequence used to identify a file format")).
+
+@provenance(design_file_formats_as_bpd, reasoning("format_version specializes cardinal: ordinal version numbers admit ordering and equality but not arithmetic"))
+dimension(:format_version,
+          parent_dimension(cardinal),
+          description("an ordinal version number for a file format")).
+
+@provenance(design_file_formats_as_bpd, reasoning("tensor_count specializes count for the GGUF tensor-info section; the cross_field constraint will link this to the section length"))
+dimension(:tensor_count,
+          parent_dimension(count),
+          description("count of tensor records in a GGUF file")).
+
+@provenance(design_file_formats_as_bpd, reasoning("metadata_kv_count specializes count for the GGUF metadata KV section; the cross_field constraint will link this to the section length"))
+dimension(:metadata_kv_count,
+          parent_dimension(count),
+          description("count of metadata key-value records in a GGUF file")).
+
+# ─── Stage 1 dimensions ──────────────────────────────────────────
+
+@provenance(metayen_2026_05_04, reasoning("metadata_key wraps a length_prefixed substrate; semantically marks the key as a UTF-8 string in the metadata KV section"))
+dimension(:metadata_key,
+          parent_substrate(length_prefixed),
+          description("a UTF-8 string serving as a metadata key; layout is length-prefixed (u64 length + bytes)")).
+
+@provenance(metayen_2026_05_04, reasoning("metadata_value_type specializes cardinal: a discriminator selecting one of 13 GGUF metadata value types"))
+dimension(:metadata_value_type,
+          parent_dimension(cardinal),
+          description("uint32 discriminator selecting one of 13 GGUF metadata value types: u8, i8, u16, i16, u32, i32, f32, bool, string, array, u64, i64, f64")).
+
+# deferred_value dimension REMOVED in Stage 1.5 — replaced by
+# dispatch/4. See medayek_2026_05_08 provenance above.
+
+@provenance(medayek_2026_05_08, reasoning("metadata_string wraps length_prefixed to mark string values in the metadata KV section as distinct from key strings"))
+dimension(:metadata_string,
+          parent_substrate(length_prefixed),
+          description("a UTF-8 string serving as a metadata value; layout is length-prefixed (u64 length + bytes)")).
+
+@provenance(medayek_2026_05_08, reasoning("array_element_count specializes count for the element count within a metadata array value"))
+dimension(:array_element_count,
+          parent_dimension(count),
+          description("count of elements in a GGUF metadata array value")).
+
+
+# ——— Tensor info section ——————————————————————————————————————————
+#
+# Variable-width records describing each tensor's name, dimensions,
+# data type, and offset within the tensor data section.
+# Follows immediately after the metadata KV section.
+
+@cites(gguf_v3_spec, reasoning("tensor info section follows metadata KV and contains tensor_count records describing tensor layout"))
+@provenance(medayek_2026_05_08, reasoning("tensor_info_section is a counted repetition of variable-width records (name is length-prefixed)"))
+format_section(:gguf, :tensor_info_section, order(2)).
+section(:tensor_info_section, variable_width).
+
+repeated(:tensor_info_section,
+         item(:tensor_info_record),
+         count_from(field(:header, :tensor_count))).
+
+section(:tensor_info_record, variable_width).
+
+@cites(gguf_v3_spec, reasoning("tensor info record starts with a length-prefixed UTF-8 tensor name"))
+field(:tensor_info_record, :name,
+      byte_offset(0),
+      tensor_name(length_prefixed(u64, u8)),
+      []).
+
+@cites(gguf_v3_spec, reasoning("n_dimensions is a uint32 giving the number of dimensions in the tensor shape"))
+field(:tensor_info_record, :n_dimensions,
+      byte_offset(after(:name)),
+      tensor_ndim(cardinal(u32)),
+      [must_be_lt(8)]).
+
+@cites(gguf_v3_spec, reasoning("dimensions array: n_dimensions x uint64, giving the shape of the tensor"))
+@provenance(medayek_2026_05_08, reasoning("tensor shape is a counted repetition within a record; count from sibling field"))
+@provenance(metayen_2026_05_13, reasoning("V.D.G1 fix: name(:dimensions) makes the repeated array addressable by `after(:dimensions)` for subsequent field offsets within the same record"))
+repeated(:tensor_info_record,
+         name(:dimensions),
+         item(field(:dimension_value, cardinal(u64), byte_count(8))),
+         count_from(field(:tensor_info_record, :n_dimensions))).
+
+@cites(gguf_v3_spec, reasoning("tensor type is a uint32 enum identifying the quantization/data type"))
+field(:tensor_info_record, :type,
+      byte_offset(after(:dimensions)),
+      tensor_type(cardinal(u32)),
+      []).
+
+@cites(gguf_v3_spec, reasoning("tensor data offset is uint64 relative to start of tensor data section"))
+@provenance(medayek_2026_05_08, reasoning("relative_offset dimensional specialization: offset relative to tensor_data_section start"))
+field(:tensor_info_record, :offset,
+      byte_offset(after(:type)),
+      tensor_data_offset(relative_offset(cardinal(u64), relative_to(:tensor_data_section))),
+      []).
+
+# ——— Tensor data section —————————————————————————————————————————
+#
+# Raw tensor data. Starts at the next alignment boundary after the
+# tensor info section (default 32 bytes). Individual tensors are
+# positioned by their tensor_info_record :offset fields.
+
+@cites(gguf_v3_spec, reasoning("tensor data section follows tensor info; starts at next 32-byte alignment boundary"))
+@provenance(medayek_2026_05_08, reasoning("align_to expresses the alignment requirement at the section level"))
+format_section(:gguf, :tensor_data_section, order(3)).
+section(:tensor_data_section, variable_width).
+align_to(:tensor_data_section, byte_alignment(32)).
+
+@provenance(medayek_2026_05_08, reasoning("tensor data is opaque at BPD level; structure determined by tensor_type and shape from tensor_info"))
+section_content(:tensor_data_section, opaque_blob).
+
+# ——— Stage 1.5 dimensions ————————————————————————————————————————
+
+@provenance(medayek_2026_05_08, reasoning("tensor_name wraps length_prefixed for tensor identification"))
+dimension(:tensor_name,
+          parent_substrate(length_prefixed),
+          description("UTF-8 tensor name, length-prefixed")).
+
+@provenance(medayek_2026_05_08, reasoning("tensor_ndim specializes cardinal to constrain tensor dimensionality"))
+dimension(:tensor_ndim,
+          parent_dimension(cardinal),
+          description("number of dimensions in a tensor shape")).
+
+@provenance(medayek_2026_05_08, reasoning("tensor_type specializes cardinal as a discriminator for tensor element types"))
+dimension(:tensor_type,
+          parent_dimension(cardinal),
+          description("uint32 discriminator for tensor element/quantization type")).
+
+@provenance(medayek_2026_05_08, reasoning("tensor_data_offset: offset relative to tensor_data_section start, not file start"))
+dimension(:tensor_data_offset,
+          parent_dimension(relative_offset),
+          description("byte offset of tensor data relative to tensor_data_section start")).
+
+# ——— End of Stage 1.5 declaration ————————————————————————————————

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<!--
+  llvm_match_status.html — live-update LLVM IR emitter ULP match status.
+
+  Substrate-source-of-truth: bpd/llvm_match_status.pl
+  Substrate-projection: llvm_match_status.o.svg
+  Auto-refresh: 5 minutes.
+
+  Table(10001) in the document registry — second canonically-declarative,
+  publicly-indexed artifact (Table(10000) is BPD lifting coverage).
+
+  Author: mavhir 2026-05-27, on substrate-direction from Heath via mavchin.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLVM IR emitter — ULP match status · Ruach Tov</title>
+  <style>
+    body {
+      font-family: Georgia, serif;
+      background: #f8f5ee;
+      color: #3a2a1a;
+      margin: 0;
+      padding: 24px;
+      max-width: 1400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 4px 0;
+      font-weight: bold;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #5a4a3a;
+      margin-bottom: 24px;
+    }
+    .substrate-image {
+      width: 100%;
+      max-width: 1280px;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #c8b090;
+    }
+    #dashboard-svg-host svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    #dashboard-svg-host rect.changed-since-gaze {
+      stroke: #d4a017;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 4px #f0c040);
+    }
+    .provenance {
+      margin-top: 32px;
+      padding: 16px 20px;
+      background: #efe8d8;
+      border-left: 3px solid #8a7a5a;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .provenance h2 {
+      font-size: 14px;
+      margin: 0 0 8px 0;
+      color: #5a4a3a;
+    }
+    code {
+      background: #e0d8c0;
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #7a6a4a;
+      text-align: center;
+    }
+    .stage {
+      display: inline-block;
+      padding: 3px 10px;
+      background: #daa520;
+      color: #3a2a1a;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>LLVM IR emitter — ULP match status</h1>
+  <div class="subtitle">
+    <span class="stage">β · public beta</span>
+    For each emission pattern × each reference implementation, how close does our
+    Prolog-generated LLVM IR get? Cells that have changed since you opened this page
+    glow with a gold rim.
+  </div>
+
+  <div id="dashboard-svg-host" class="substrate-image">
+    <div style="padding: 40px; text-align: center; color: #7a6a4a;">
+      Opening the scrying-glass…
+    </div>
+  </div>
+
+  <script>
+    // Intermittent scrying-glass — see lift_coverage.html for the longer
+    // commentary. Fetches the lattice inline, captures cell colors at
+    // gaze-opening, polls every 30s, rims changed cells with a gold aura.
+    (function() {
+      const host = document.getElementById('dashboard-svg-host');
+      const svgUrl = '/diviner/llvm_match_status.svg';
+      let lastModified = null;
+      let gazeOpeningColors = null;
+
+      function snapshotColors() {
+        const snapshot = new Map();
+        host.querySelectorAll('rect[data-dim]').forEach(rect => {
+          snapshot.set(rect.getAttribute('data-dim'), rect.getAttribute('fill'));
+        });
+        return snapshot;
+      }
+
+      function applyGoldAura() {
+        if (!gazeOpeningColors) return;
+        host.querySelectorAll('rect[data-dim]').forEach(rect => {
+          const dim = rect.getAttribute('data-dim');
+          const currentFill = rect.getAttribute('fill');
+          const originalFill = gazeOpeningColors.get(dim);
+          if (originalFill && currentFill !== originalFill) {
+            rect.classList.add('changed-since-gaze');
+          }
+        });
+      }
+
+      async function loadSvg(isInitial) {
+        try {
+          const response = await fetch(svgUrl + '?t=' + Date.now(), { cache: 'no-cache' });
+          if (!response.ok) return;
+          lastModified = response.headers.get('Last-Modified');
+          host.innerHTML = await response.text();
+          if (isInitial) {
+            gazeOpeningColors = snapshotColors();
+            console.log('[ruach-tov] gaze opened —', gazeOpeningColors.size, 'cells captured');
+          } else {
+            applyGoldAura();
+            console.log('[ruach-tov] lattice re-inked — aura applied');
+          }
+        } catch (e) {
+          console.warn('[ruach-tov] load failed:', e);
+        }
+      }
+
+      async function checkForUpdate() {
+        // Re-fetch SVG every 30s (diviner regenerates from Prolog each time)
+        await loadSvg(false);
+      }
+
+      loadSvg(true);
+      setInterval(checkForUpdate, 30000);
+    })();
+  </script>
+
+  <div class="provenance">
+    <h2>How this dashboard works</h2>
+    <strong>Every cell is generated from automated tests.</strong> No manual annotation.
+    The CI pipeline runs <code>verify_llvm_ops.py</code> which measures each of 44 ops
+    against reference implementations, then emits Prolog facts. The SVG is regenerated
+    from those facts. The page polls every 30 seconds and highlights changed cells with
+    a gold aura.
+    <br><br>
+    <strong>Bookspine progress bars.</strong> Each cell shows one thin vertical stripe per op
+    in that pattern, sorted by status. The bar fills from left to right as ops are verified.
+    A cell shows "IR-match" only when <em>every</em> op in that pattern is blue.
+    <br><br>
+    <strong>Color meanings:</strong>
+    <br>
+    🔵 <strong>Blue</strong> = IR-match: 0 ULP AND our LLVM IR structurally matches the reference's
+    instruction sequence. Verified by automated IR-diff.
+    <br>
+    🟢 <strong>Green</strong> = 0 ULP: numerically bit-identical, but LLVM IR structure not yet
+    confirmed to match. The numbers are right; the code may differ.
+    <br>
+    🟡 <strong>Yellow</strong> = 1–100 ULP: close but not bit-identical. Known root cause documented.
+    <br>
+    🔴 <strong>Red</strong> = &gt;100 ULP: significant divergence. Needs investigation.
+    <br>
+    ⚫ <strong>Grey</strong> = untested.
+    <br><br>
+    <strong>Source of truth:</strong> <code>bpd/lib/llvm_op_match.pl</code> (per-op facts) +
+    <code>bpd/llvm_match_status.pl</code> (SVG generator). Regenerate via
+    <code>swipl -g main llvm_match_status.pl</code>. Pure deduction from facts.
+    <br><br>
+    <strong>CI pipeline:</strong>
+    <code>verify_llvm_ops.py</code> → <code>llvm_op_match_ci.pl</code> → 
+    <code>swipl llvm_match_status.pl</code> → SVG → publish.
+    <br><br>
+    <strong>The 9 emission patterns</strong> (from <code>kernel_patterns.pl</code>):
+    unary_elementwise (12 ops), binary_elementwise (1), reduction (7),
+    reduction_then_elementwise (6), scan (2), conv_im2col (6), pool_reduce (3),
+    loss_reduce (6), flash_attention (1). 44 ops total → 44 bookspines across 9 rows.
+    <br><br>
+    <strong>Canonical addressing:</strong>
+    <code>Table(10001).LLVM_IR_Match_Status</code>. Each cell carries a
+    <a href="https://ruachtov.ai/blog/semantic-web.html">watermarkup</a>
+    coordinate: <code>data-dim="cell(table(10001),column(&lt;ref&gt;),row(&lt;pattern&gt;))"</code>.
+  </div>
+
+  <div class="footer">
+    Substrate-direction: Heath. Emitter: mavchin. Verification: medayek. Cross-tab: mavhir.
+    All facts from automated tests. The methodology IS the substrate. 2026-05-27.
+  </div>
+</body>
+</html>

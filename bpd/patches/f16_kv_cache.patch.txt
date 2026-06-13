@@ -1,0 +1,97 @@
+--- bpd_llama_block.c.orig
++++ bpd_llama_block.c
+@@ Description:
+  Patch for F16 KV cache support (L.1 Phase 2c4-2c5)
+  
+  Changes:
+  1. Add extern declarations for f32_to_f16, f16_to_f32, bpd_kv_cache_write_f16_cpu
+  2. Change k_cache/v_cache types from float* to uint16_t* (F16)
+  3. Replace bpd_kv_cache_write_cpu with bpd_kv_cache_write_f16_cpu
+  4. Add F16→F32 pre-dequantize step before bpd_gqa_attn_cpu
+  5. Allocate scratch buffer for F32 cache dequant in bpd_llama_block_cpu
+  
+  Author: medayek (Collective SME, Verification Methodology)
+  Plan: c13d771b Phase 2c4-2c5
+  
+  === EXTERN DECLARATIONS (add after existing externs) ===
+  
+  ADD:
+    extern uint16_t f32_to_f16(float f);
+    extern float f16_to_f32(uint16_t h);
+    extern void bpd_kv_cache_write_f16_cpu(uint16_t* cache_f16, const float* src,
+            int n_tokens, int n_kv_heads, int head_dim,
+            int max_seq_len, int pos_offset);
+  
+  === bpd_llama_block_cpu SIGNATURE (change cache types) ===
+  
+  CHANGE:
+    float*  k_cache,    /* [max_seq_len, n_kv_heads*head_dim] */
+    float*  v_cache,    /* [max_seq_len, n_kv_heads*head_dim] */
+  TO:
+    uint16_t*  k_cache,    /* [max_seq_len, n_kv_heads*head_dim] F16 */
+    uint16_t*  v_cache,    /* [max_seq_len, n_kv_heads*head_dim] F16 */
+  
+  === KV CACHE WRITES (replace F32 with F16) ===
+  
+  CHANGE (line ~133):
+    bpd_kv_cache_write_cpu(k_cache, scratch3, pos_ids, n_tokens,
+                           HKV, D, cfg->max_seq_len);
+  TO:
+    bpd_kv_cache_write_f16_cpu(k_cache, scratch3, n_tokens,
+                               HKV, D, cfg->max_seq_len, kv_pos);
+  
+  CHANGE (line ~140):
+    bpd_kv_cache_write_cpu(v_cache, scratch3, pos_ids, n_tokens,
+                           HKV, D, cfg->max_seq_len);
+  TO:
+    bpd_kv_cache_write_f16_cpu(v_cache, scratch3, n_tokens,
+                               HKV, D, cfg->max_seq_len, kv_pos);
+  
+  === ATTENTION CALL (pre-dequantize F16 cache to F32 scratch) ===
+  
+  BEFORE the bpd_gqa_attn_cpu call, ADD:
+  
+    /* Pre-dequantize F16 cache to F32 for attention math */
+    int kv_size = n_kv * HKV * D;
+    float* k_f32 = (float*)malloc(kv_size * sizeof(float));
+    float* v_f32 = (float*)malloc(kv_size * sizeof(float));
+    for (int i = 0; i < kv_size; i++) {
+        k_f32[i] = f16_to_f32(k_cache[i]);
+        v_f32[i] = f16_to_f32(v_cache[i]);
+    }
+  
+  CHANGE:
+    bpd_gqa_attn_cpu(scratch2, k_cache, v_cache,
+  TO:
+    bpd_gqa_attn_cpu(scratch2, k_f32, v_f32,
+  
+  AFTER the bpd_gqa_attn_cpu call, ADD:
+    free(k_f32);
+    free(v_f32);
+  
+  === bpd_llama_forward_cpu SIGNATURE (change cache types) ===
+  
+  CHANGE:
+    float*  k_cache,     /* [n_layers, max_seq_len, n_kv_heads*head_dim] */
+    float*  v_cache,     /* [n_layers, max_seq_len, n_kv_heads*head_dim] */
+  TO:
+    uint16_t*  k_cache,     /* [n_layers, max_seq_len, n_kv_heads*head_dim] F16 */
+    uint16_t*  v_cache,     /* [n_layers, max_seq_len, n_kv_heads*head_dim] F16 */
+  
+  CHANGE (line ~210):
+    float* layer_k_cache = k_cache + layer * kv_layer_stride;
+    float* layer_v_cache = v_cache + layer * kv_layer_stride;
+  TO:
+    uint16_t* layer_k_cache = k_cache + layer * kv_layer_stride;
+    uint16_t* layer_v_cache = v_cache + layer * kv_layer_stride;
+  
+  === ORCHESTRATOR CHANGES (bpd_llamatov_infer.py) ===
+  
+  CHANGE cache allocation from:
+    k_cache = np.zeros(n_layers * max_seq_len * n_kv_heads * head_dim, dtype=np.float32)
+    v_cache = np.zeros(n_layers * max_seq_len * n_kv_heads * head_dim, dtype=np.float32)
+  TO:
+    k_cache = np.zeros(n_layers * max_seq_len * n_kv_heads * head_dim, dtype=np.uint16)
+    v_cache = np.zeros(n_layers * max_seq_len * n_kv_heads * head_dim, dtype=np.uint16)
+  
+  And update ctypes pointer types from c_float_p to c_uint16_p for cache args.

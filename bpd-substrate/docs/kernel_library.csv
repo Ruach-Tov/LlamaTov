@@ -1,0 +1,408 @@
+kernel_name,source,category,complexity,class,implemented,verified,notes
+k_matmul,llamatov,BLAS-L3,high,matmul,yes,yes,Basic GEMM F32
+k_matmul_opt,llamatov,BLAS-L3,high,matmul,yes,yes,Tiled shared-memory GEMM
+k_vecmat,llamatov,BLAS-L2,medium,matmul,yes,yes,M=1 decode vecmat (cuBLAS-parity)
+k_dp4a,llamatov,BLAS-L2,high,matmul,yes,yes,INT8 dp4a vecmat (BEATS cuBLAS 1.12-1.87x)
+k_relu,llamatov,elementwise,trivial,activation,yes,yes,ReLU activation
+k_silu,llamatov,elementwise,trivial,activation,yes,yes,SiLU/swish activation
+k_gelu_tanh,llamatov,elementwise,trivial,activation,yes,yes,GELU tanh approximation (ggml_gelu / Ollama runtime / HF gelu_new); cell [2]+[3] verified on Tesla P4 across 6 sizes; cross-axis max ULP 7-188
+k_gelu_erf,llamatov,elementwise,trivial,activation,yes,yes,GELU exact erf form (ggml_gelu_erf / F.gelu(none) / HF gelu default); cell [2]+[3] verified on Tesla P4 across 6 sizes; cross-axis max ULP 374-8050
+k_tanh,llamatov,elementwise,trivial,activation,yes,yes,Tanh activation
+k_sigmoid,llamatov_bpd,elementwise,trivial,activation,yes,yes,Sigmoid (BPD-emitted); cell [2]+[3] verified on Tesla P4 across 6 sizes; cross-axis --ulp 2 MATCH
+k_add,llamatov,elementwise,trivial,arithmetic,yes,yes,Element-wise addition
+k_mul,llamatov,elementwise,trivial,arithmetic,yes,yes,Element-wise multiplication
+k_scale,llamatov,elementwise,trivial,arithmetic,yes,yes,Scalar multiplication
+k_rms_norm,llamatov,normalization,medium,normalization,yes,yes,RMS normalization (matches CPU to 3e-6)
+k_layer_norm,llamatov,normalization,medium,normalization,yes,yes,Layer normalization with bias
+k_softmax,llamatov,reduction,medium,reduction,yes,yes,Row-wise softmax
+k_argmax,llamatov,reduction,low,reduction,yes,yes,Argmax over logits
+k_embed_lookup,llamatov,gather,low,embedding,yes,yes,Token embedding table lookup
+k_rope,llamatov,spatial,medium,positional,yes,yes,Rotary position embedding (Q+K)
+k_rope_k,llamatov,spatial,medium,positional,yes,yes,RoPE for K heads separately
+k_causal_mask,llamatov,spatial,low,attention,yes,yes,Upper-triangular causal mask
+k_kv_attention,llamatov,attention,high,attention,yes,yes,Single-token decode attention with KV cache
+k_kv_store,llamatov,memory,low,kv_cache,yes,yes,Append K/V to cache at position
+k_gqa_expand,llamatov,layout,low,attention,yes,yes,GQA key/value head expansion
+k_vecmat_silu,llamatov_bpd,fused,medium,fused_matmul,yes,compiles,Fused vecmat + SiLU (BPD-generated)
+k_vecmat_gelu,llamatov_bpd,fused,medium,fused_matmul,yes,compiles,Fused vecmat + GELU (BPD-generated)
+k_vecmat_relu,llamatov_bpd,fused,medium,fused_matmul,yes,compiles,Fused vecmat + ReLU (BPD-generated)
+ggml_sub,llama.cpp,elementwise,trivial,arithmetic,classified,no,Subtraction
+ggml_div,llama.cpp,elementwise,trivial,arithmetic,classified,no,Division
+ggml_sqr,llama.cpp,elementwise,trivial,arithmetic,classified,no,Square
+ggml_sqrt,llama.cpp,elementwise,trivial,arithmetic,classified,no,Square root
+ggml_exp,llama.cpp,elementwise,trivial,arithmetic,classified,no,Exponential
+ggml_log,llama.cpp,elementwise,trivial,arithmetic,classified,no,Natural log
+ggml_neg,llama.cpp,elementwise,trivial,arithmetic,classified,no,Negation
+ggml_abs,llama.cpp,elementwise,trivial,arithmetic,classified,no,Absolute value
+ggml_clamp,llama.cpp,elementwise,trivial,arithmetic,classified,no,Clamp to range
+ggml_softplus,llama.cpp,elementwise,trivial,activation,classified,no,Softplus
+ggml_leaky_relu,llama.cpp,elementwise,trivial,activation,classified,no,Leaky ReLU
+ggml_selu,llama.cpp,elementwise,trivial,activation,classified,no,SELU
+ggml_elu,llama.cpp,elementwise,trivial,activation,classified,no,ELU
+ggml_hardsigmoid,llama.cpp,elementwise,trivial,activation,classified,no,Hard sigmoid
+ggml_softsign,llama.cpp,elementwise,trivial,activation,classified,no,Softsign
+ggml_xielu,llama.cpp,elementwise,trivial,activation,classified,no,xielu variant
+ggml_swiglu_split,llama.cpp,elementwise,low,activation,classified,no,SwiGLU split
+ggml_l2_norm,llama.cpp,normalization,medium,normalization,classified,no,L2 normalization
+ggml_group_norm,llama.cpp,normalization,medium,normalization,classified,no,Group normalization
+ggml_sum_rows,llama.cpp,reduction,low,reduction,classified,no,Row-wise sum
+ggml_mean,llama.cpp,reduction,low,reduction,classified,no,Mean reduction
+ggml_cumsum,llama.cpp,reduction,low,reduction,classified,no,Cumulative sum
+ggml_cumprod,llama.cpp,reduction,low,reduction,classified,no,Cumulative product
+ggml_max,llama.cpp,reduction,low,reduction,classified,no,Max reduction
+ggml_min,llama.cpp,reduction,low,reduction,classified,no,Min reduction
+ggml_argmin,llama.cpp,reduction,low,reduction,classified,no,Argmin
+ggml_log_soft_max,llama.cpp,reduction,medium,reduction,classified,no,Log softmax
+ggml_mse_loss,llama.cpp,reduction,low,loss,classified,no,MSE loss
+ggml_cross_entropy_loss,llama.cpp,reduction,medium,loss,classified,no,Cross-entropy loss
+ggml_huber_loss,llama.cpp,reduction,low,loss,classified,no,Huber loss
+ggml_kl_div_loss,llama.cpp,reduction,medium,loss,classified,no,KL divergence loss
+ggml_triplet_margin_loss,llama.cpp,reduction,medium,loss,classified,no,Triplet margin loss
+ggml_hinge_loss,llama.cpp,reduction,low,loss,classified,no,Hinge loss
+ggml_conv_1d,llama.cpp,spatial,high,convolution,classified,no,1D convolution
+ggml_conv_2d,llama.cpp,spatial,high,convolution,classified,no,2D convolution
+ggml_conv_3d,llama.cpp,spatial,very_high,convolution,classified,no,3D convolution
+ggml_conv_1d_dw_ph,llama.cpp,spatial,medium,convolution,classified,no,1D depthwise conv
+ggml_conv_transpose_1d,llama.cpp,spatial,high,convolution,classified,no,1D transposed conv
+ggml_conv_transpose_2d,llama.cpp,spatial,high,convolution,classified,no,2D transposed conv
+ggml_conv_transpose_3d,llama.cpp,spatial,very_high,convolution,classified,no,3D transposed conv
+ggml_pool_1d,llama.cpp,spatial,medium,pooling,classified,no,1D pooling
+ggml_pool_2d,llama.cpp,spatial,medium,pooling,classified,no,2D pooling
+ggml_pool_3d,llama.cpp,spatial,high,pooling,classified,no,3D pooling
+ggml_rope_ext,llama.cpp,spatial,medium,positional,classified,no,Extended RoPE
+ggml_rope_multi,llama.cpp,spatial,high,positional,classified,no,Multi-RoPE
+ggml_ssm_conv,llama.cpp,ssm,high,state_space,classified,no,Mamba SSM convolution
+ggml_ssm_scan,llama.cpp,ssm,very_high,state_space,classified,no,Mamba SSM scan
+ggml_rwkv_wkv6,llama.cpp,rwkv,very_high,recurrent,classified,no,RWKV-6 WKV
+ggml_rwkv_wkv7,llama.cpp,rwkv,very_high,recurrent,classified,no,RWKV-7 WKV
+ggml_flash_attn_ext,llama.cpp,attention,very_high,attention,classified,no,Flash attention
+ggml_gated_linear_attn,llama.cpp,attention,high,attention,classified,no,Gated linear attention
+build_lora_mm,llama.cpp,BLAS-L3,high,matmul,classified,no,LoRA matmul
+sgemm,cuBLAS,BLAS-L3,reference,matmul,baseline,baseline,F32 GEMM (reference)
+dgemm,cuBLAS,BLAS-L3,reference,matmul,baseline,baseline,F64 GEMM
+hgemm,cuBLAS,BLAS-L3,reference,matmul,baseline,baseline,F16 GEMM
+igemm,cuBLAS,BLAS-L3,reference,matmul,baseline,baseline,INT8 GEMM
+sgemv,cuBLAS,BLAS-L2,reference,matmul,baseline,baseline,F32 GEMV (our decode target)
+saxpy,cuBLAS,BLAS-L1,reference,arithmetic,baseline,baseline,y = ax + y
+sdot,cuBLAS,BLAS-L1,reference,arithmetic,baseline,baseline,Dot product
+snrm2,cuBLAS,BLAS-L1,reference,reduction,baseline,baseline,L2 norm
+sscal,cuBLAS,BLAS-L1,reference,arithmetic,baseline,baseline,Scalar multiply
+strsv,cuBLAS,BLAS-L2,reference,linear_solve,baseline,baseline,Triangular solve
+ssyrk,cuBLAS,BLAS-L3,reference,matmul,baseline,baseline,Symmetric rank-k
+flash_attention,FlashAttention,attention,very_high,attention,reference,reference,Fused QKV attention (Tri Dao)
+flash_attention_2,FlashAttention-2,attention,very_high,attention,reference,reference,Online softmax + tiling
+flash_attention_3,FlashAttention-3,attention,very_high,attention,reference,reference,H100-optimized
+thunderkittens_gemm,ThunderKittens,BLAS-L3,very_high,matmul,reference,reference,DSL-generated GEMM
+thunderkittens_attn,ThunderKittens,attention,very_high,attention,reference,reference,DSL-generated attention
+cutlass_gemm,CUTLASS,BLAS-L3,very_high,matmul,reference,reference,Template GEMM
+cutlass_conv2d,CUTLASS,spatial,very_high,convolution,reference,reference,Template Conv2D
+triton_matmul,Triton,BLAS-L3,high,matmul,reference,reference,Triton GEMM tutorial
+triton_softmax,Triton,reduction,medium,reduction,reference,reference,Triton fused softmax
+triton_flash_attn,Triton,attention,very_high,attention,reference,reference,Triton flash attention
+triton_layer_norm,Triton,normalization,medium,normalization,reference,reference,Triton layer norm
+KB_L1_matmul,KernelBench-L1,BLAS-L3,low,matmul,benchmark,benchmark,Single matmul
+KB_L1_conv2d,KernelBench-L1,spatial,medium,convolution,benchmark,benchmark,Single conv2d
+KB_L1_relu,KernelBench-L1,elementwise,trivial,activation,benchmark,benchmark,Single ReLU
+KB_L1_batchnorm,KernelBench-L1,normalization,medium,normalization,benchmark,benchmark,Batch normalization
+KB_L1_maxpool,KernelBench-L1,spatial,low,pooling,benchmark,benchmark,Max pooling
+KB_L1_avgpool,KernelBench-L1,spatial,low,pooling,benchmark,benchmark,Average pooling
+KB_L1_dropout,KernelBench-L1,elementwise,low,regularization,benchmark,benchmark,Dropout
+KB_L1_softmax,KernelBench-L1,reduction,medium,reduction,benchmark,benchmark,Softmax
+KB_L1_cross_entropy,KernelBench-L1,reduction,medium,loss,benchmark,benchmark,Cross entropy
+KB_L1_linear,KernelBench-L1,BLAS-L3,medium,matmul,benchmark,benchmark,Linear (matmul + bias)
+KB_L2_conv_bn_relu,KernelBench-L2,fused,medium,fused_conv,benchmark,benchmark,Conv + BatchNorm + ReLU
+KB_L2_linear_relu,KernelBench-L2,fused,low,fused_matmul,benchmark,benchmark,Linear + ReLU
+KB_L2_matmul_add,KernelBench-L2,fused,low,fused_matmul,benchmark,benchmark,MatMul + Add (residual)
+KB_L2_layernorm_linear,KernelBench-L2,fused,medium,fused_norm,benchmark,benchmark,LayerNorm + Linear
+KB_L3_mobilenet,KernelBench-L3,architecture,very_high,full_model,benchmark,benchmark,Full MobileNet
+KB_L3_vgg,KernelBench-L3,architecture,very_high,full_model,benchmark,benchmark,Full VGG
+KB_L3_resnet,KernelBench-L3,architecture,very_high,full_model,benchmark,benchmark,Full ResNet
+KB_L3_minigpt,KernelBench-L3,architecture,very_high,full_model,benchmark,benchmark,Full MiniGPT
+KB_L3_bert,KernelBench-L3,architecture,very_high,full_model,benchmark,benchmark,Full BERT
+radix_sort,crypto/HPC,sorting,high,sorting,external,no,GPU radix sort (used in crypto mining)
+prefix_scan,crypto/HPC,reduction,medium,scan,external,no,Parallel prefix scan/sum
+histogram,CV/HPC,reduction,medium,histogram,external,no,GPU histogram
+scatter_gather,HPC,memory,medium,memory,external,no,Scatter/gather operations
+sparse_mv,HPC,BLAS-L2,high,sparse,external,no,Sparse matrix-vector multiply
+fft_1d,signal,transform,high,transform,external,no,1D FFT on GPU
+fft_2d,signal,transform,very_high,transform,external,no,2D FFT on GPU
+stencil_2d,physics,spatial,medium,stencil,external,no,2D stencil computation
+nbody,physics,spatial,high,simulation,external,no,N-body gravitational
+particle_grid,physics,spatial,high,simulation,external,no,Particle-to-grid (MPM)
+ray_triangle,graphics,spatial,medium,intersection,external,no,Ray-triangle intersection
+rasterize,graphics,spatial,very_high,rendering,external,no,GPU rasterization
+texture_sample,graphics,spatial,medium,sampling,external,no,Texture sampling/filtering
+sha256,crypto,bitwise,medium,hash,external,no,SHA-256 hash kernel
+ethash,crypto,bitwise,high,hash,external,no,Ethash mining kernel
+im2col,CV,layout,medium,convolution,external,no,Image-to-column for conv
+roi_pool,CV,spatial,medium,detection,external,no,Region of interest pooling
+nms,CV,reduction,medium,detection,external,no,Non-maximum suppression
+bilinear_interp,CV,spatial,low,interpolation,external,no,Bilinear interpolation
+warp_affine,CV,spatial,medium,transform,external,no,Affine image warp
+bfs,Rodinia,graph,medium,traversal,external,no,Breadth-first search on GPU
+backprop,Rodinia,neural,medium,training,external,no,Backpropagation neural network
+cfd,Rodinia,physics,high,simulation,external,no,Computational fluid dynamics
+gaussian,Rodinia,BLAS-L3,medium,linear_solve,external,no,Gaussian elimination
+heartwall,Rodinia,CV,high,tracking,external,no,Heart wall tracking (medical imaging)
+hotspot,Rodinia,physics,medium,stencil,external,no,Thermal simulation hotspot
+kmeans,Rodinia,clustering,medium,clustering,external,no,K-means clustering
+lavaMD,Rodinia,physics,high,simulation,external,no,Molecular dynamics (Lennard-Jones)
+lud,Rodinia,BLAS-L3,high,linear_solve,external,no,LU decomposition
+needle,Rodinia,bioinformatics,medium,alignment,external,no,Needleman-Wunsch sequence alignment
+nn,Rodinia,spatial,low,nearest_neighbor,external,no,Nearest neighbor search
+pathfinder,Rodinia,graph,medium,dynamic_prog,external,no,Pathfinder (dynamic programming)
+srad,Rodinia,CV,medium,filtering,external,no,Speckle reducing anisotropic diffusion
+streamcluster,Rodinia,clustering,high,clustering,external,no,Online stream clustering
+spmv,Parboil,BLAS-L2,high,sparse,external,no,Sparse matrix-vector multiply
+stencil_3d,Parboil,physics,high,stencil,external,no,3D stencil computation
+tpacf,Parboil,astronomy,high,correlation,external,no,Two-point angular correlation
+mri_gridding,Parboil,medical,high,interpolation,external,no,MRI gridding reconstruction
+mri_q,Parboil,medical,medium,transform,external,no,MRI Q matrix computation
+histo,Parboil,reduction,medium,histogram,external,no,Histogram computation
+sad,Parboil,CV,medium,matching,external,no,Sum of absolute differences
+md5,crypto,bitwise,medium,hash,external,no,MD5 hash kernel
+blake2b,crypto,bitwise,medium,hash,external,no,BLAKE2b hash kernel
+equihash,crypto,bitwise,very_high,hash,external,no,Equihash proof-of-work
+scan_exclusive,CUB,reduction,medium,scan,external,no,Exclusive prefix scan
+scan_inclusive,CUB,reduction,medium,scan,external,no,Inclusive prefix scan
+reduce_sum,CUB,reduction,low,reduction,external,no,Sum reduction
+reduce_max,CUB,reduction,low,reduction,external,no,Max reduction
+select_if,CUB,memory,medium,selection,external,no,Conditional selection (filter)
+unique,CUB,memory,medium,dedup,external,no,Remove consecutive duplicates
+merge_sort,CUB,sorting,high,sorting,external,no,GPU merge sort
+run_length_encode,CUB,reduction,medium,encoding,external,no,Run-length encoding
+batch_gemm,cuBLAS,BLAS-L3,high,matmul,baseline,baseline,Batched GEMM
+symm,cuBLAS,BLAS-L3,high,matmul,baseline,baseline,Symmetric matrix multiply
+trmm,cuBLAS,BLAS-L3,high,matmul,baseline,baseline,Triangular matrix multiply
+sger,cuBLAS,BLAS-L2,medium,outer_product,baseline,baseline,Rank-1 update (outer product)
+deformable_conv,CV,spatial,very_high,convolution,external,no,Deformable convolution
+grid_sample,CV,spatial,medium,interpolation,external,no,Grid sampling (STN)
+focal_loss,CV,reduction,medium,loss,external,no,Focal loss (RetinaNet)
+anchor_gen,CV,spatial,low,detection,external,no,Anchor box generation
+depth_to_space,CV,layout,low,reshape,external,no,Depth to space rearrangement
+batch_norm_train,CV,normalization,medium,normalization,external,no,BatchNorm with running stats
+instance_norm,CV,normalization,medium,normalization,external,no,Instance normalization
+spectral_norm,CV,normalization,high,normalization,external,no,Spectral normalization
+weight_norm,CV,normalization,medium,normalization,external,no,Weight normalization
+multi_head_attn,transformer,attention,high,attention,external,no,Multi-head attention (unfused)
+rotary_embed,transformer,spatial,medium,positional,external,no,Rotary position embedding
+alibi,transformer,spatial,low,positional,external,no,ALiBi position bias
+kv_cache_paged,transformer,memory,high,kv_cache,external,no,Paged KV cache (vLLM)
+top_k_sampling,transformer,reduction,medium,sampling,external,no,Top-k token sampling
+top_p_sampling,transformer,reduction,medium,sampling,external,no,Nucleus (top-p) sampling
+quantize_int8,quantization,elementwise,low,quantization,external,no,FP32 to INT8 quantization
+dequantize_int8,quantization,elementwise,low,quantization,external,no,INT8 to FP32 dequantization
+quantize_fp16,quantization,elementwise,trivial,quantization,external,no,FP32 to FP16 cast
+mixed_precision_gemm,quantization,BLAS-L3,high,matmul,external,no,FP16 input / FP32 accumulate GEMM
+vectorAdd,CUDA-samples,elementwise,trivial,arithmetic,external,no,Vector addition (intro)
+matrixMul,CUDA-samples,BLAS-L3,medium,matmul,external,no,Matrix multiply (shared memory)
+matrixMulCUBLAS,CUDA-samples,BLAS-L3,medium,matmul,external,no,cuBLAS GEMM wrapper
+reduction,CUDA-samples,reduction,medium,reduction,external,no,Parallel sum reduction (7 variants)
+scan,CUDA-samples,reduction,medium,scan,external,no,Parallel prefix sum
+transpose,CUDA-samples,layout,medium,transpose,external,no,Matrix transpose (coalesced)
+histogram,CUDA-samples,reduction,medium,histogram,external,no,GPU histogram (64/256 bin)
+convolutionSeparable,CUDA-samples,spatial,medium,convolution,external,no,Separable 2D convolution
+convolutionFFT,CUDA-samples,spatial,high,convolution,external,no,FFT-based convolution
+recursiveGaussian,CUDA-samples,spatial,medium,filtering,external,no,Recursive Gaussian filter
+bilateralFilter,CUDA-samples,spatial,medium,filtering,external,no,Bilateral edge-preserving filter
+boxFilter,CUDA-samples,spatial,low,filtering,external,no,Box filter (moving average)
+dct8x8,CUDA-samples,transform,medium,transform,external,no,Discrete cosine transform 8x8
+eigenvalues,CUDA-samples,BLAS-L3,high,linear_solve,external,no,Eigenvalue computation
+conjugateGradient,CUDA-samples,BLAS-L2,high,linear_solve,external,no,Conjugate gradient solver
+sortingNetworks,CUDA-samples,sorting,medium,sorting,external,no,Bitonic/odd-even merge sort
+nbody_cuda,CUDA-samples,physics,high,simulation,external,no,N-body gravitational simulation
+particles,CUDA-samples,physics,high,simulation,external,no,Particle system simulation
+fluidsGL,CUDA-samples,physics,high,simulation,external,no,Fluid simulation (Navier-Stokes)
+smokeParticles,CUDA-samples,physics,high,simulation,external,no,Smoke particle simulation
+MonteCarloBS,CUDA-samples,finance,medium,simulation,external,no,Monte Carlo Black-Scholes
+binomialOptions,CUDA-samples,finance,medium,simulation,external,no,Binomial options pricing
+quasirandomGenerator,CUDA-samples,random,medium,generation,external,no,Quasi-random number generation
+imageDenoising,CUDA-samples,CV,medium,filtering,external,no,Image denoising (NLM)
+stereoDisparity,CUDA-samples,CV,high,stereo,external,no,Stereo disparity computation
+marchingCubes,CUDA-samples,graphics,high,geometry,external,no,Marching cubes isosurface
+simpleTexture,CUDA-samples,graphics,low,sampling,external,no,Texture memory usage
+volumeRender,CUDA-samples,graphics,high,rendering,external,no,Volume ray casting
+mandelbrot,CUDA-samples,compute,medium,fractal,external,no,Mandelbrot set fractal
+julia,CUDA-samples,compute,medium,fractal,external,no,Julia set fractal
+BlackScholes,CUDA-samples,finance,medium,pricing,external,no,Black-Scholes option pricing
+cufft_1d,CUDA-libraries,transform,medium,transform,external,no,cuFFT 1D transform
+cufft_2d,CUDA-libraries,transform,high,transform,external,no,cuFFT 2D transform
+cusparse_spmv,CUDA-libraries,BLAS-L2,high,sparse,external,no,cuSPARSE sparse MV
+cusolver_lu,CUDA-libraries,BLAS-L3,high,linear_solve,external,no,cuSOLVER LU factorization
+cusolver_svd,CUDA-libraries,BLAS-L3,very_high,decomposition,external,no,cuSOLVER SVD
+cusolver_qr,CUDA-libraries,BLAS-L3,high,decomposition,external,no,cuSOLVER QR factorization
+npp_resize,CUDA-libraries,CV,medium,interpolation,external,no,NPP image resize
+npp_filter,CUDA-libraries,CV,medium,filtering,external,no,NPP image filtering
+nvjpeg_decode,CUDA-libraries,CV,high,codec,external,no,NVJPEG hardware decode
+2dconv,PolyBench/GPU,spatial,medium,convolution,external,no,2D convolution (polyhedral)
+3dconv,PolyBench/GPU,spatial,high,convolution,external,no,3D convolution (polyhedral)
+2mm,PolyBench/GPU,BLAS-L3,high,matmul,external,no,Two matrix multiplications (D=A*B*C)
+3mm,PolyBench/GPU,BLAS-L3,very_high,matmul,external,no,Three matrix multiplications
+atax,PolyBench/GPU,BLAS-L2,medium,matmul,external,no,Matrix transpose and vector multiply
+bicg,PolyBench/GPU,BLAS-L2,medium,matmul,external,no,BiCG sub-kernel
+correlation,PolyBench/GPU,datamining,medium,statistics,external,no,Correlation computation
+covariance,PolyBench/GPU,datamining,medium,statistics,external,no,Covariance computation
+fdtd2d,PolyBench/GPU,physics,medium,stencil,external,no,2D FDTD electromagnetic
+gemm_poly,PolyBench/GPU,BLAS-L3,medium,matmul,external,no,General matrix multiply
+gesummv,PolyBench/GPU,BLAS-L2,medium,matmul,external,no,Scalar/vector/matrix multiply
+gramschmidt,PolyBench/GPU,BLAS-L3,high,decomposition,external,no,Gram-Schmidt decomposition
+jacobi1d,PolyBench/GPU,physics,low,stencil,external,no,1D Jacobi stencil
+jacobi2d,PolyBench/GPU,physics,medium,stencil,external,no,2D Jacobi stencil
+mvt,PolyBench/GPU,BLAS-L2,medium,matmul,external,no,Matrix vector product + transpose
+syr2k,PolyBench/GPU,BLAS-L3,high,matmul,external,no,Symmetric rank-2k update
+syrk_poly,PolyBench/GPU,BLAS-L3,high,matmul,external,no,Symmetric rank-k update
+smith_waterman,bioinformatics,alignment,medium,alignment,external,no,Smith-Waterman local alignment
+blast_align,bioinformatics,alignment,high,alignment,external,no,BLAST sequence alignment on GPU
+hmmer,bioinformatics,alignment,high,alignment,external,no,Hidden Markov model protein search
+kmers_count,bioinformatics,reduction,medium,counting,external,no,K-mer counting for genome assembly
+minimap2_chain,bioinformatics,graph,high,chaining,external,no,Minimap2 chaining on GPU
+correlator,astronomy,reduction,high,correlation,external,no,Radio telescope correlator
+gridding_astro,astronomy,spatial,high,interpolation,external,no,Radio imaging gridding
+matched_filter,astronomy,spatial,medium,filtering,external,no,Gravitational wave matched filter
+option_mc,finance,random,high,simulation,external,no,Option pricing Monte Carlo (advanced)
+var_historical,finance,reduction,medium,statistics,external,no,Value-at-Risk historical simulation
+portfolio_opt,finance,BLAS-L3,high,optimization,external,no,Portfolio optimization (QP solver)
+order_book,finance,sorting,medium,sorting,external,no,Order book matching engine
+md_lj,chemistry,physics,high,simulation,external,no,Lennard-Jones molecular dynamics
+md_coulomb,chemistry,physics,very_high,simulation,external,no,Coulomb force calculation (PME)
+dft_grid,chemistry,spatial,very_high,quantum,external,no,DFT grid integration (VASP-style)
+dock_score,chemistry,spatial,high,scoring,external,no,Molecular docking scoring function
+weather_stencil,climate,physics,high,stencil,external,no,Weather model stencil (WRF-style)
+ocean_fft,climate,transform,very_high,simulation,external,no,Ocean model spectral solver
+seismic_rtm,geophysics,physics,very_high,simulation,external,no,Reverse time migration (seismic)
+wavefield_prop,geophysics,physics,high,stencil,external,no,Acoustic wavefield propagation
+bfs_shoc,SHOC,graph,medium,traversal,external,no,BFS graph traversal (SHOC)
+fft_shoc,SHOC,transform,high,transform,external,no,FFT benchmark (SHOC)
+md_shoc,SHOC,physics,high,simulation,external,no,Molecular dynamics (SHOC)
+reduction_shoc,SHOC,reduction,medium,reduction,external,no,Parallel reduction (SHOC)
+scan_shoc,SHOC,reduction,medium,scan,external,no,Prefix scan (SHOC)
+sort_shoc,SHOC,sorting,high,sorting,external,no,Parallel sort (SHOC)
+spmv_shoc,SHOC,BLAS-L2,high,sparse,external,no,Sparse matrix-vector (SHOC)
+stencil2d_shoc,SHOC,physics,medium,stencil,external,no,2D stencil (SHOC)
+triad_shoc,SHOC,elementwise,trivial,arithmetic,external,no,Stream triad a[i]=b[i]+c*d[i] (SHOC bandwidth)
+bfs_lonestar,Lonestar-GPU,graph,high,traversal,external,no,BFS (irregular workload)
+sssp_lonestar,Lonestar-GPU,graph,high,traversal,external,no,Single-source shortest path
+mst_lonestar,Lonestar-GPU,graph,very_high,spanning,external,no,Minimum spanning tree
+dmr_lonestar,Lonestar-GPU,graph,very_high,refinement,external,no,Delaunay mesh refinement
+bh_lonestar,Lonestar-GPU,physics,very_high,simulation,external,no,Barnes-Hut n-body
+sp_lonestar,Lonestar-GPU,graph,high,partitioning,external,no,Survey propagation
+pt_lonestar,Lonestar-GPU,graph,high,traversal,external,no,Point-to-point shortest path
+wmma_gemm,tensor_cores,BLAS-L3,very_high,matmul,external,no,Tensor core WMMA GEMM (Volta+)
+wmma_conv,tensor_cores,spatial,very_high,convolution,external,no,Tensor core WMMA convolution
+mma_gemm,tensor_cores,BLAS-L3,very_high,matmul,external,no,MMA PTX GEMM (Ampere+)
+cudnn_conv_fwd,cuDNN,spatial,very_high,convolution,external,no,cuDNN convolution forward (multiple algorithms)
+cudnn_conv_bwd_data,cuDNN,spatial,very_high,convolution,external,no,cuDNN convolution backward data
+cudnn_conv_bwd_filter,cuDNN,spatial,very_high,convolution,external,no,cuDNN convolution backward filter
+cudnn_bn_fwd,cuDNN,normalization,medium,normalization,external,no,cuDNN batch normalization forward
+cudnn_bn_bwd,cuDNN,normalization,medium,normalization,external,no,cuDNN batch normalization backward
+cudnn_softmax_fwd,cuDNN,reduction,medium,reduction,external,no,cuDNN softmax forward
+cudnn_dropout_fwd,cuDNN,elementwise,low,regularization,external,no,cuDNN dropout forward
+cudnn_rnn_fwd,cuDNN,recurrent,very_high,recurrent,external,no,cuDNN RNN forward (LSTM/GRU)
+cudnn_ctc_loss,cuDNN,reduction,high,loss,external,no,cuDNN CTC loss
+cudnn_mha_fwd,cuDNN,attention,very_high,attention,external,no,cuDNN multi-head attention forward
+cudnn_sdpa_fwd,cuDNN,attention,very_high,attention,external,no,cuDNN scaled dot-product attention (v9.13+)
+cudnn_resample,cuDNN,spatial,medium,interpolation,external,no,cuDNN resample (upsample/downsample)
+cudnn_pointwise_add,cuDNN,elementwise,trivial,arithmetic,external,no,cuDNN pointwise add
+cudnn_pointwise_mul,cuDNN,elementwise,trivial,arithmetic,external,no,cuDNN pointwise multiply
+cudnn_pointwise_relu,cuDNN,elementwise,trivial,activation,external,no,cuDNN pointwise ReLU
+cudnn_pointwise_elu,cuDNN,elementwise,trivial,activation,external,no,cuDNN pointwise ELU
+cudnn_pointwise_gelu,cuDNN,elementwise,trivial,activation,external,no,cuDNN pointwise GELU
+cudnn_diag_band_mask,cuDNN,spatial,medium,attention,external,no,cuDNN diagonal band mask (v9.20+)
+dbscan_gpu,RAPIDS-cuML,clustering,high,clustering,external,no,DBSCAN density clustering on GPU
+hdbscan_gpu,RAPIDS-cuML,clustering,very_high,clustering,external,no,Hierarchical DBSCAN on GPU
+kmeans_gpu,RAPIDS-cuML,clustering,medium,clustering,external,no,K-means clustering on GPU
+pca_gpu,RAPIDS-cuML,decomposition,high,decomposition,external,no,PCA on GPU (SVD-based)
+tsvd_gpu,RAPIDS-cuML,decomposition,high,decomposition,external,no,Truncated SVD on GPU
+umap_gpu,RAPIDS-cuML,reduction,very_high,embedding,external,no,UMAP manifold embedding on GPU
+tsne_gpu,RAPIDS-cuML,reduction,very_high,embedding,external,no,t-SNE embedding on GPU
+ols_gpu,RAPIDS-cuML,BLAS-L3,medium,regression,external,no,OLS linear regression on GPU
+lasso_gpu,RAPIDS-cuML,BLAS-L3,high,regression,external,no,Lasso/Ridge regression on GPU
+logistic_gpu,RAPIDS-cuML,BLAS-L3,high,classification,external,no,Logistic regression on GPU
+knn_gpu,RAPIDS-cuML,spatial,high,nearest_neighbor,external,no,K-NN search on GPU (uses FAISS)
+svm_gpu,RAPIDS-cuML,BLAS-L3,high,classification,external,no,SVM classifier on GPU
+rf_gpu,RAPIDS-cuML,tree,very_high,classification,external,no,Random forest on GPU
+naive_bayes_gpu,RAPIDS-cuML,reduction,medium,classification,external,no,Naive Bayes on GPU
+arima_gpu,RAPIDS-cuML,timeseries,high,timeseries,external,no,ARIMA time series on GPU
+holt_winters_gpu,RAPIDS-cuML,timeseries,medium,timeseries,external,no,Holt-Winters exponential smoothing
+pagerank_gpu,RAPIDS-cuGraph,graph,high,ranking,external,no,PageRank on GPU
+sssp_gpu,RAPIDS-cuGraph,graph,high,traversal,external,no,Single-source shortest path on GPU
+bfs_gpu,RAPIDS-cuGraph,graph,medium,traversal,external,no,BFS on GPU
+connected_comp,RAPIDS-cuGraph,graph,medium,partitioning,external,no,Connected components on GPU
+louvain,RAPIDS-cuGraph,graph,high,clustering,external,no,Louvain community detection
+katz_centrality,RAPIDS-cuGraph,graph,medium,ranking,external,no,Katz centrality on GPU
+betweenness,RAPIDS-cuGraph,graph,very_high,ranking,external,no,Betweenness centrality on GPU
+jaccard_sim,RAPIDS-cuGraph,graph,medium,similarity,external,no,Jaccard similarity on GPU
+triangle_count,RAPIDS-cuGraph,graph,high,counting,external,no,Triangle counting on GPU
+k_truss,RAPIDS-cuGraph,graph,very_high,subgraph,external,no,K-truss subgraph extraction
+sdf_sphere,graphics-compute,spatial,low,sdf,external,no,Signed distance field sphere
+sdf_union,graphics-compute,spatial,medium,sdf,external,no,SDF boolean union (smooth min)
+ray_march,graphics-compute,spatial,high,rendering,external,no,Ray marching through SDF
+pbr_shade,graphics-compute,spatial,medium,rendering,external,no,Physically-based rendering shading
+deferred_light,graphics-compute,spatial,medium,rendering,external,no,Deferred lighting pass
+ssao,graphics-compute,spatial,medium,rendering,external,no,Screen-space ambient occlusion
+bloom_filter,graphics-compute,spatial,low,post_process,external,no,Bloom post-processing filter
+motion_blur,graphics-compute,spatial,medium,post_process,external,no,Motion blur accumulation
+lz4_compress,compression,bitwise,high,compression,external,no,LZ4 GPU compression (nvCOMP)
+snappy_compress,compression,bitwise,high,compression,external,no,Snappy GPU compression (nvCOMP)
+zstd_decompress,compression,bitwise,very_high,compression,external,no,Zstandard GPU decompression
+stft,audio,transform,medium,transform,external,no,Short-time Fourier transform
+mel_filterbank,audio,spatial,medium,filtering,external,no,Mel-scale filterbank application
+spectrogram,audio,transform,medium,transform,external,no,Spectrogram computation
+griffin_lim,audio,transform,high,synthesis,external,no,Griffin-Lim phase reconstruction
+vocoder_hifigan,audio,neural,very_high,synthesis,external,no,HiFi-GAN neural vocoder
+ctc_decode_beam,audio,graph,high,decoding,external,no,CTC beam search decoding
+icp,robotics,spatial,high,registration,external,no,Iterative closest point (point cloud)
+voxel_grid,robotics,spatial,medium,downsampling,external,no,Voxel grid downsampling
+ransac_plane,robotics,spatial,medium,fitting,external,no,RANSAC plane fitting
+occupancy_grid,robotics,spatial,medium,mapping,external,no,3D occupancy grid update
+lidar_project,robotics,spatial,medium,projection,external,no,LiDAR point cloud projection
+ego_motion,robotics,BLAS-L3,high,estimation,external,no,Ego-motion estimation (visual odometry)
+aes_encrypt,crypto,bitwise,medium,cipher,external,no,AES-256 GPU encryption
+chacha20,crypto,bitwise,medium,cipher,external,no,ChaCha20 stream cipher
+argon2,crypto,bitwise,very_high,hash,external,no,Argon2 memory-hard hash (password)
+ed25519_verify,crypto,bitwise,high,signature,external,no,Ed25519 signature verification batch
+batched_inv,BLAS-extended,BLAS-L3,high,linear_solve,external,no,Batched matrix inversion
+cholesky,BLAS-extended,BLAS-L3,high,decomposition,external,no,Cholesky factorization
+gesvd_batched,BLAS-extended,BLAS-L3,very_high,decomposition,external,no,Batched SVD
+kronecker,BLAS-extended,BLAS-L3,medium,matmul,external,no,Kronecker product
+hadamard,BLAS-extended,elementwise,low,arithmetic,external,no,Hadamard (element-wise) product
+outer_product,BLAS-extended,BLAS-L2,medium,matmul,external,no,Outer product (rank-1 update)
+qsim_gate,quantum,spatial,high,simulation,external,no,Quantum gate application (state vector)
+qsim_measure,quantum,reduction,medium,simulation,external,no,Quantum measurement sampling
+tensor_contract,quantum,BLAS-L3,very_high,contraction,external,no,Tensor network contraction
+mcts_expand,RL,graph,high,search,external,no,Monte Carlo tree search expansion
+env_step_batch,RL,spatial,medium,simulation,external,no,Batched environment step (Atari/MuJoCo)
+gae_compute,RL,reduction,medium,advantage,external,no,Generalized advantage estimation
+embed_lookup,recommender,gather,medium,embedding,external,no,Embedding table lookup (large sparse)
+feature_interact,recommender,BLAS-L3,medium,interaction,external,no,Feature interaction (DLRM)
+ctr_predict,recommender,BLAS-L3,medium,prediction,external,no,Click-through rate prediction
+sparse_adam,optimizer,elementwise,medium,optimization,external,no,Sparse Adam optimizer update
+lamb_update,optimizer,elementwise,medium,optimization,external,no,LAMB optimizer (large batch)
+mixed_prec_scale,optimizer,elementwise,low,scaling,external,no,Mixed-precision loss scaling
+grad_clip,optimizer,reduction,low,normalization,external,no,Gradient norm clipping
+all_reduce_ring,distributed,memory,high,communication,external,no,Ring all-reduce (NCCL pattern)
+all_gather,distributed,memory,medium,communication,external,no,All-gather collective
+reduce_scatter,distributed,memory,medium,communication,external,no,Reduce-scatter collective
+pipeline_bubble,distributed,memory,high,scheduling,external,no,Pipeline parallelism bubble fill
+lbm_d2q9,CFD-LBM,physics,medium,simulation,external,no,Lattice Boltzmann D2Q9 stream+collide (2D fluid)
+lbm_d3q19,CFD-LBM,physics,high,simulation,external,no,Lattice Boltzmann D3Q19 stream+collide (3D fluid)
+lbm_bgk,CFD-LBM,physics,medium,simulation,external,no,BGK collision operator (single relaxation time)
+lbm_mrt,CFD-LBM,physics,high,simulation,external,no,MRT collision operator (multiple relaxation times)
+euler_1d_roe,CFD-FVM,physics,medium,simulation,external,no,1D Euler equations Roe flux (shock tube)
+euler_2d_muscl,CFD-FVM,physics,high,simulation,external,no,2D Euler MUSCL reconstruction + Riemann solver
+ns_explicit_2d,CFD-FDM,physics,high,simulation,external,no,2D Navier-Stokes explicit time-stepping
+ns_fractional_step,CFD-FDM,physics,very_high,simulation,external,no,Fractional step method (pressure-velocity coupling)
+poisson_jacobi,CFD-solver,physics,medium,linear_solve,external,no,Poisson equation via Jacobi iteration (pressure solve)
+poisson_multigrid,CFD-solver,physics,very_high,linear_solve,external,no,Multigrid Poisson solver (V-cycle)
+poisson_fft,CFD-solver,transform,high,linear_solve,external,no,Poisson via FFT (spectral method)
+lid_driven_cavity,CFD-benchmark,physics,medium,simulation,external,no,Lid-driven cavity (Ghia et al. benchmark, Re=100-10000)
+sod_shock_tube,CFD-benchmark,physics,low,simulation,external,no,Sod's shock tube (exact analytical solution available)
+taylor_green_vortex,CFD-benchmark,physics,medium,simulation,external,no,Taylor-Green vortex decay (analytical solution for short time)
+blasius_flat_plate,CFD-benchmark,physics,medium,simulation,external,no,Blasius boundary layer (analytical similarity solution)
+backward_facing_step,CFD-benchmark,physics,high,simulation,external,no,Backward-facing step (Driver-Seegmiller experimental data)
+channel_flow_dns,CFD-benchmark,physics,very_high,simulation,external,no,Turbulent channel flow DNS (Moser/Kim/Mansour Re_tau=180-590)
+onera_m6_wing,CFD-benchmark,physics,very_high,simulation,external,no,ONERA M6 transonic wing (experimental pressure data)
+cylinder_vortex,CFD-benchmark,physics,medium,simulation,external,no,Laminar flow over circular cylinder (Strouhal number validation)
+dam_break_sph,CFD-SPH,physics,high,simulation,external,no,Dam break SPH (smoothed particle hydrodynamics)
+sph_density,CFD-SPH,reduction,medium,interpolation,external,no,SPH density summation kernel
+sph_pressure_force,CFD-SPH,spatial,high,simulation,external,no,SPH pressure force computation

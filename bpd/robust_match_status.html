@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<!--
+  robust_match_status.html — live-update Robust 0-ULP match status.
+
+  Substrate-source-of-truth: bpd/robust_match_status.pl
+  Substrate-projection: robust_match_status.o.svg
+  Auto-refresh: 30 seconds.
+
+  Table(10100) in the document registry — sibling to Table(10001).
+  Same Stanford L1/L2/L3 kernels × reference implementations grid, but
+  tracks Iyun's expanded methodology: 0 ULP AND robust across input sizes
+  AND numerical-edge-case stability (-0.0 round-trip, NaN/Inf propagation,
+  denormal handling).
+
+  Author: mavhir 2026-05-31, on Heath's direction.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Robust 0-ULP match status · Ruach Tov</title>
+  <style>
+    body {
+      font-family: Georgia, serif;
+      background: #f8f5ee;
+      color: #3a2a1a;
+      margin: 0;
+      padding: 24px;
+      max-width: 1400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 4px 0;
+      font-weight: bold;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #5a4a3a;
+      margin-bottom: 24px;
+    }
+    .substrate-image {
+      width: 100%;
+      max-width: 1280px;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #c8b090;
+      background: #1a1a1a;
+    }
+    #dashboard-svg-host svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    #dashboard-svg-host rect.changed-since-gaze {
+      stroke: #d4a017;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 4px #f0c040);
+    }
+    .provenance {
+      margin-top: 32px;
+      padding: 16px 20px;
+      background: #efe8d8;
+      border-left: 3px solid #8a7a5a;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .provenance h2 {
+      font-size: 14px;
+      margin: 0 0 8px 0;
+      color: #5a4a3a;
+    }
+    code {
+      background: #e0d8c0;
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #7a6a4a;
+      text-align: center;
+    }
+    .stage {
+      display: inline-block;
+      padding: 3px 10px;
+      background: #d4af37;
+      color: #3a2a1a;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Robust 0-ULP match status</h1>
+  <div class="subtitle">
+    <span class="stage">β · public beta</span>
+    For each Stanford L1/L2/L3 kernel × each reference implementation, has our generated
+    LLVM IR achieved <em>robust</em> 0-ULP closure? Robust means: 0 ULP across a size
+    sweep AND numerical-edge-case stability (signed-zero, NaN/Inf, denormals).
+    Cells that have changed since you opened this page glow with a gold rim.
+  </div>
+
+  <div id="dashboard-svg-host" class="substrate-image">
+    <div style="padding: 40px; text-align: center; color: #a8a8a8;">
+      Opening the scrying-glass…
+    </div>
+  </div>
+
+  <script>
+    // Same scrying-glass pattern as Table(10001) — fetch lattice inline,
+    // snapshot cell colors at gaze-opening, poll every 30s, rim changed
+    // cells with gold aura.
+    (function() {
+      const host = document.getElementById('dashboard-svg-host');
+      const svgUrl = '/diviner/robust_match_status.svg';
+      let gazeOpeningColors = null;
+
+      function snapshotColors() {
+        const snapshot = new Map();
+        host.querySelectorAll('rect[data-dim]').forEach(rect => {
+          snapshot.set(rect.getAttribute('data-dim'), rect.getAttribute('fill'));
+        });
+        return snapshot;
+      }
+
+      function applyGoldAura() {
+        if (!gazeOpeningColors) return;
+        host.querySelectorAll('rect[data-dim]').forEach(rect => {
+          const dim = rect.getAttribute('data-dim');
+          const currentFill = rect.getAttribute('fill');
+          const originalFill = gazeOpeningColors.get(dim);
+          if (originalFill && currentFill !== originalFill) {
+            rect.classList.add('changed-since-gaze');
+          }
+        });
+      }
+
+      async function loadSvg(isInitial) {
+        try {
+          const response = await fetch(svgUrl + '?t=' + Date.now(), { cache: 'no-cache' });
+          if (!response.ok) return;
+          host.innerHTML = await response.text();
+          if (isInitial) {
+            gazeOpeningColors = snapshotColors();
+            console.log('[ruach-tov] gaze opened —', gazeOpeningColors.size, 'cells captured');
+          } else {
+            applyGoldAura();
+            console.log('[ruach-tov] lattice re-inked — aura applied');
+          }
+        } catch (e) {
+          console.warn('[ruach-tov] load failed:', e);
+        }
+      }
+
+      async function checkForUpdate() {
+        await loadSvg(false);
+      }
+
+      loadSvg(true);
+      setInterval(checkForUpdate, 30000);
+    })();
+  </script>
+
+  <div class="provenance">
+    <h2>How this dashboard works</h2>
+    <strong>Every cell is generated from automated tests.</strong> No manual annotation.
+    Two referees feed the dashboard:
+    <br>
+    • <code>bpd/bench/stanford_referee.py</code> — authoritative L1 judge using the
+    actual Stanford KernelBench problem files as reference (<code>prob.Model().forward()</code>).
+    Runs the Stanford gate (canonical shapes 64×1024, 256×1024) plus a robust gate
+    (size sweep + edge-case vector: ±0, ±1, ±88, denormals, ±inf, NaN).
+    <br>
+    • <code>bpd/tests/verify_robust_ops_auto.py</code> — Iyun's harness emitting
+    structured Prolog facts with <code>coordinates_pinned/1</code> evidence (the
+    parameters that closed each cell: form, signed_zero_branch, accumulator dtype).
+    <br><br>
+    Outputs of both referees flow through <code>bpd/tools/wire_referees_to_dashboard.py</code>
+    into <code>bpd/lib/robust_op_match.o.pl</code>, the dashboard's source-of-record.
+    <br><br>
+    <strong>Color meanings (closed-form, no human gating):</strong>
+    <br>
+    🥇 <strong>Gold</strong> — 0 ULP across the size sweep AND all edge-case checks pass.
+    Bit-exact AND robust.
+    <br>
+    🥈 <strong>Silver</strong> — 0 ULP canonical, but at least one robustness check fails
+    (e.g., -0.0 doesn't round-trip correctly).
+    <br>
+    🥉 <strong>Bronze</strong> — within 4 ULP across the sweep, or some shapes diverge.
+    Empirically close but not bit-exact.
+    <br>
+    ⚫ <strong>Dim grey</strong> — robustness harness has not yet measured this cell.
+    <br><br>
+    <strong>The parameter-extraction framing</strong> (Heath, 2026-05-31): every structural
+    fact lifted from asm becomes a parameter of the implementation. Unroll factor,
+    transcendental identity, signed-zero branch, accumulator dtype — each surfaces a
+    coordinate the generator must pin to close a cell. The drill-down for each cell
+    shows the <code>coordinates_pinned/1</code> evidence — exactly which parameters
+    closed that cell.
+    <br><br>
+    <strong>Source of truth:</strong> <code>bpd/lib/robust_op_match.o.pl</code> (generated
+    facts from referees) + <code>bpd/robust_match_status.pl</code> (SVG generator).
+    Regenerate via <code>swipl -g main bpd/robust_match_status.pl</code>. Pure deduction
+    from facts.
+    <br><br>
+    <strong>Canonical addressing:</strong>
+    <code>Table(10100).Robust_0ULP_Match_Status</code>. Each cell carries a
+    <a href="https://ruachtov.ai/blog/semantic-web.html">watermarkup</a>
+    coordinate: <code>data-dim="cell(table(10100),column(&lt;ref&gt;),row(&lt;pattern&gt;))"</code>.
+    <br><br>
+    <strong>Relation to Table(10001):</strong> 10001 tracks raw ULP (0 ULP on canonical
+    input). 10100 raises the bar: 0 ULP across a size sweep + edge-case stability.
+    A cell gold in 10001 may be silver or bronze in 10100 until robustness is verified.
+  </div>
+
+  <div class="footer">
+    Substrate-direction: Heath. Dashboard: mavhir. Referee + harness: Iyun.
+    Adapter: bpd/tools/ir_submit_adapter.py. All facts from automated tests.
+    The methodology IS the substrate. 2026-05-31.
+  </div>
+</body>
+</html>

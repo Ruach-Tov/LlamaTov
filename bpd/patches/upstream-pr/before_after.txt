@@ -1,0 +1,6 @@
+PRE-PATCH (sm_61, no -mattr):
+  LLVM ERROR: Cannot select: intrinsic %llvm.nvvm.shfl.sync.bfly.f32
+POST-PATCH (sm_61, +ptx60):
+  warp sum of [0..32) = 496  (expect 496)
+  SUCCESS
+sm_70 (no -mattr): OK (6 shfl lines) -- confirms arch-dependent default PTX version

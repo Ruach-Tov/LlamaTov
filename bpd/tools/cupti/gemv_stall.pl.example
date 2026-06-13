@@ -1,0 +1,11 @@
+:- use_foreign_library('/tmp/cupti_q8.so', install_cupti_q8).
+:- initialization(main).
+main :-
+    cupti_init, write('init ok'), nl,
+    % profile OUR k_q8_0_gemv at the FFN down-proj shape M=896 K=4864, 300 iters
+    ( catch(run_q8_gemv('/tmp/fact_cubins/q8_gemv_dp4a_5c3d5c5c.cubin', 896, 4864, 300), E, (write('launch err: '),write(E),nl,fail))
+    -> write('gemv launched'), nl ; write('launch FAILED'),nl ),
+    cupti_flush,
+    cupti_total_samples(N), format("total PC samples: ~w~n",[N]),
+    cupti_stall_report(SL), format("STALL REPORT (k_q8_0_gemv, M=896 K=4864): ~w~n",[SL]),
+    halt.

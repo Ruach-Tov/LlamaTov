@@ -1,0 +1,5 @@
+build/
+*.so
+# *.cu — removed: CUDA source files should be tracked
+__pycache__/
+*.pyc

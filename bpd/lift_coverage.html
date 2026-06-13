@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<!--
+  lift_coverage.html — live-update substrate-of-progress for BPD lifting coverage.
+
+  Substrate-source-of-truth: bpd/lift_coverage.pl
+  Substrate-projection: lift_coverage.o.svg (regenerated via swipl -g main lift_coverage.pl)
+  Substrate-of-public-perception: this HTML page substantively-embeds the SVG.
+
+  Auto-refresh: 5 minutes. Insiders watching see substrate-cells animate
+  as the Collective substantively-substrate-ships substrate-work.
+
+  Substrate-care discipline: the page substantively-narrates its own
+  substrate-provenance so visitors know what they are substantively-looking at.
+
+  Author: mavhir 2026-05-26 (substrate-vocabulary commit with Heath)
+  Substrate-direction: alpha-stage — internal Collective visibility.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BPD lifting coverage · Ruach Tov Collective</title>
+  <style>
+    body {
+      font-family: Georgia, serif;
+      background: #f8f5ee;
+      color: #3a2a1a;
+      margin: 0;
+      padding: 24px;
+      max-width: 1400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 4px 0;
+      font-weight: bold;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #5a4a3a;
+      margin-bottom: 24px;
+    }
+    .substrate-image {
+      width: 100%;
+      max-width: 1280px;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #c8b090;
+    }
+    /* The host div contains an inline <svg>; make it scale like the img would. */
+    #dashboard-svg-host svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .provenance {
+      margin-top: 32px;
+      padding: 16px 20px;
+      background: #efe8d8;
+      border-left: 3px solid #8a7a5a;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .provenance h2 {
+      font-size: 14px;
+      margin: 0 0 8px 0;
+      color: #5a4a3a;
+    }
+    code {
+      background: #e0d8c0;
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #7a6a4a;
+      text-align: center;
+    }
+    .stage {
+      display: inline-block;
+      padding: 3px 10px;
+      background: #daa520;
+      color: #3a2a1a;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>BPD lifting coverage</h1>
+  <div class="subtitle">
+    <span class="stage">α · internal collective</span>
+    Live status of BPD-fact-lifting across substrate-sources · cells that have changed since you opened this page glow with a gold rim
+  </div>
+
+  <!-- The lattice itself is fetched inline so the gold-aura working has
+       DOM access to individual cells. Placeholder shown until first load. -->
+  <div id="dashboard-svg-host" class="substrate-image">
+    <div style="padding: 40px; text-align: center; color: #7a6a4a;">
+      Opening the scrying-glass…
+    </div>
+  </div>
+
+  <style>
+    /* Gold-aura: cells that have changed since gaze-opening glow with a
+       golden rim. Stands out against the cell's own color. */
+    #dashboard-svg-host rect.changed-since-gaze {
+      stroke: #d4a017;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 4px #f0c040);
+    }
+  </style>
+
+  <script>
+    // Intermittent scrying-glass.
+    //
+    // Fetches the SVG lattice inline (not as <img>) so the cells are part
+    // of the page DOM. Captures each cell's color at gaze-opening. Polls
+    // the URL every 30 seconds; when the parchment is re-inked, replaces
+    // the lattice inline and rims any cell whose color has shifted since
+    // gaze-opening with a gold aura.
+    //
+    // The gold-aura working stands on its own. When the future casting
+    // replaces polling with SSE-tides from a Prolog Diviner, the same
+    // cell-comparison logic continues to work — the perception-of-motion
+    // is decoupled from the transport beneath it.
+    (function() {
+      const host = document.getElementById('dashboard-svg-host');
+      const svgUrl = 'lift_coverage.o.svg';
+      let lastModified = null;
+      let gazeOpeningColors = null;   // Map: data-dim → fill color at first load
+
+      // Read each cell's data-dim and fill color from the live SVG in the host.
+      function snapshotColors() {
+        const snapshot = new Map();
+        const cells = host.querySelectorAll('rect[data-dim]');
+        cells.forEach(rect => {
+          const dim = rect.getAttribute('data-dim');
+          const fill = rect.getAttribute('fill');
+          snapshot.set(dim, fill);
+        });
+        return snapshot;
+      }
+
+      // Apply gold aura to any cell whose color differs from gaze-opening.
+      function applyGoldAura() {
+        if (!gazeOpeningColors) return;
+        const cells = host.querySelectorAll('rect[data-dim]');
+        cells.forEach(rect => {
+          const dim = rect.getAttribute('data-dim');
+          const currentFill = rect.getAttribute('fill');
+          const originalFill = gazeOpeningColors.get(dim);
+          if (originalFill && currentFill !== originalFill) {
+            rect.classList.add('changed-since-gaze');
+          }
+        });
+      }
+
+      async function loadSvg(isInitial) {
+        try {
+          const response = await fetch(svgUrl + '?t=' + Date.now(), { cache: 'no-cache' });
+          if (!response.ok) {
+            console.warn('[ruach-tov] fetch failed:', response.status);
+            return;
+          }
+          lastModified = response.headers.get('Last-Modified');
+          const svgText = await response.text();
+          host.innerHTML = svgText;
+
+          if (isInitial) {
+            // First gaze: capture the lattice state as the reference.
+            gazeOpeningColors = snapshotColors();
+            console.log('[ruach-tov] gaze opened —', gazeOpeningColors.size, 'cells captured');
+          } else {
+            applyGoldAura();
+            console.log('[ruach-tov] lattice re-inked — aura applied');
+          }
+        } catch (e) {
+          console.warn('[ruach-tov] load failed:', e);
+        }
+      }
+
+      async function checkForUpdate() {
+        try {
+          const response = await fetch(svgUrl, { method: 'HEAD', cache: 'no-cache' });
+          const currentModified = response.headers.get('Last-Modified');
+          if (currentModified && currentModified !== lastModified) {
+            await loadSvg(false);
+          }
+        } catch (e) {
+          console.warn('[ruach-tov] poll failed:', e);
+        }
+      }
+
+      // Open the gaze, then poll every 30 seconds.
+      loadSvg(true);
+      setInterval(checkForUpdate, 30000);
+    })();
+  </script>
+
+  <div class="provenance">
+    <h2>Substrate-of-record</h2>
+    Source of truth: <code>bpd/lift_coverage.pl</code> in the Ruach Tov repository.
+    The Prolog facts (<code>lift_coverage/4</code>) declare which substrate-sources
+    have working BPD-fact-lifting at each capability layer.
+    <br><br>
+    The SVG derives from the facts via <code>swipl -g main lift_coverage.pl</code>.
+    Pure deduction; no hand-editing. Anyone with the repo can regenerate.
+    <br><br>
+    <strong>Cell semantics:</strong>
+    green = working; amber half-circle = partial; red = not started; grey circle = planned.
+    Each cell carries an evidence-citation in the Prolog substrate.
+    <br><br>
+    <strong>Canonical addressing.</strong>
+    This is <code>Table(10000).BPD_Lifting_Coverage</code> — the first canonically-declarative,
+    publicly-indexed artifact in our document registry. Each cell carries a
+    <a href="https://ruachtov.ai/blog/semantic-web.html">watermarkup</a>
+    naming its canonical coordinate. View the SVG source: every colored
+    <code>&lt;rect&gt;</code> has <code>class="m"</code> and
+    <code>data-dim="cell(table(10000),column(&lt;capability&gt;),row(&lt;source&gt;))"</code>.
+    The watermarkup is an inline, open-vocabulary, self-describing semantic annotation
+    that travels with the document — AI agents can parse it without a schema registry,
+    humans see only the cell color.
+    <br><br>
+    <strong>Rollout stages:</strong> α (this page, internal collective) → β (peer correction
+    of cell claims) → γ (CI validates cells from empirical truth) → public beta on the colony.
+  </div>
+
+  <div class="footer">
+    Substrate-vocabulary co-authored with Heath, 2026-05-26 · methodology-IS-the-substrate
+  </div>
+</body>
+</html>

@@ -1,0 +1,13 @@
+:- use_foreign_library('/tmp/q8_events.so', install_q8_gemv_events).
+:- initialization(main).
+main :-
+    format("=== sectors_per_load for k_q8_0_gemv (our kernel) ===~n",[]),
+    ( catch(run_q8_gemv_events('/tmp/fact_cubins/q8_gemv_dp4a_5c3d5c5c.cubin', 896, 896, S1), E1, (write(E1),nl,S1= -1))
+      -> format(">>> attn-proj M=896 K=896:   sectors_per_load = ~4f~n",[S1]) ; true ),
+    ( catch(run_q8_gemv_events('/tmp/fact_cubins/q8_gemv_dp4a_5c3d5c5c.cubin', 896, 4864, S2), E2, (write(E2),nl,S2= -1))
+      -> format(">>> FFN-down M=896 K=4864:   sectors_per_load = ~4f~n",[S2]) ; true ),
+    ( catch(run_q8_gemv_events('/tmp/fact_cubins/q8_gemv_dp4a_5c3d5c5c.cubin', 4864, 896, S3), E3, (write(E3),nl,S3= -1))
+      -> format(">>> FFN-up M=4864 K=896:     sectors_per_load = ~4f~n",[S3]) ; true ),
+    ( catch(run_q8_gemv_events('/tmp/fact_cubins/q8_gemv_dp4a_5c3d5c5c.cubin', 151936, 896, S4), E4, (write(E4),nl,S4= -1))
+      -> format(">>> vocab M=151936 K=896:    sectors_per_load = ~4f~n",[S4]) ; true ),
+    halt.

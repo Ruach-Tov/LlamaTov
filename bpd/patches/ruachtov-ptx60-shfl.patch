@@ -1,0 +1,45 @@
+# ruachtov-ptx60-shfl.patch
+#
+# Adds `-mattr=+ptx60` to cuda-oxide's two llc invocations (mir-importer/src/pipeline.rs), so that
+# warp-shuffle intrinsics (llvm.nvvm.shfl.sync.*) and other PTX-ISA-6.0+ instructions can be
+# instruction-selected for nvptx64.
+#
+# ROOT CAUSE: cuda-oxide invoked `llc -march=nvptx64 -mcpu=sm_XX <kernel.ll>` with NO PTX-version
+# target feature. The `shfl.sync.{bfly,idx,up,down}.*` intrinsics require PTX ISA >= 6.0; without
+# `-mattr=+ptx60` (or higher) llc defaults to an older PTX version where they do not exist, so
+# selection fails:
+#     LLVM ERROR: Cannot select: intrinsic %llvm.nvvm.shfl.sync.bfly.f32
+# This is NOT a Pascal/sm_61 limitation — sm_61 supports shfl.sync fine. It is a missing toolchain
+# flag. Verified directly: `llc -march=nvptx64 -mcpu=sm_61` fails; adding `-mattr=+ptx60` succeeds
+# and emits correct `shfl.sync.bfly.b32` instructions.
+#
+# +ptx60 is the SURGICAL minimum: it is the exact feature that gates the shuffle intrinsics. Higher
+# versions (+ptx70 etc.) also work but are unnecessary and risk emitting instructions newer drivers
+# require. The shipped `warp_reduce` example, and any warp-cooperative kernel (reductions, GEMV warp
+# tiling), need this.
+#
+# VERIFIED on Tesla P4 (sm_61), LLVM 21.1.0-rc1, CUDA 12.8, nightly-2026-04-03:
+#   - the cuda-oxide warp_reduce example now lowers (was: Cannot select shfl.sync.idx.f32)
+#   - a q8_0 dp4a GEMV using warp::shuffle_xor_f32 (tree(shfl_xor,5) reduction) compiles AND runs
+#     0-ULP vs both a CPU reference and the nvcc-generated kernel on identical inputs.
+#
+# Apply: cd cuda-oxide && git apply ruachtov-ptx60-shfl.patch
+#
+--- a/crates/mir-importer/src/pipeline.rs
++++ b/crates/mir-importer/src/pipeline.rs
+@@ -865,6 +865,7 @@
+         let result = std::process::Command::new(&llc_path)
+             .arg("-march=nvptx64")
+             .arg(format!("-mcpu={}", target))
++            .arg("-mattr=+ptx60")  // ruachtov: shfl.sync etc. need PTX ISA 6.0+
+             .arg(ll_path)
+             .arg("-o")
+             .arg(ptx_path)
+@@ -903,6 +904,7 @@
+         let result = std::process::Command::new(llc_cmd)
+             .arg("-march=nvptx64")
+             .arg(format!("-mcpu={}", llc_target))
++            .arg("-mattr=+ptx60")  // ruachtov: shfl.sync etc. need PTX ISA 6.0+
+             .arg(ll_path)
+             .arg("-o")
+             .arg(ptx_path)

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360" font-family="sans-serif">
+  <rect x="0" y="0" width="800" height="360" fill="#fafafa"/>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#222">Threadblock-to-tile mapping: nonexistent_kernel</text>
+  <text x="20" y="52" font-size="13" fill="#555">Mapping does not exist for this kernel (or is not yet classified).</text>
+  <rect x="100" y="100" width="600" height="180" fill="#ffffff" stroke="#999" stroke-width="1" stroke-dasharray="6 4"/>
+  <text x="400" y="175" font-size="20" font-weight="bold" fill="#666" text-anchor="middle">This Node Intentionally Left Blank</text>
+  <text x="400" y="210" font-size="14" fill="#888" text-anchor="middle">(Mapping does not exist for this kernel.)</text>
+</svg>

@@ -1,0 +1,47 @@
+DUAL LICENSE STRUCTURE
+
+This project uses two licenses:
+
+1. GPLv2 (LICENSE-GPL.md)
+   Applies to: ALL files EXCEPT those listed below.
+   You may use, modify, and distribute under GPLv2 terms.
+   This includes all kernels, verification harnesses, the GGUF
+   pipeline, safe_read.pl, implementation_matches.pl, and all
+   benchmark/test code. You can run the full toolchain on public
+   models and publish optimized model outputs under GPLv2.
+
+2. RTAAL-1.0 (LICENSE-RTAAL-1-0.md)
+   Applies to: The kernel fusion optimizer and model transform system:
+     lib/fusion_optimizer.pl
+     lib/apply_fusion.pl
+     lib/matmul_optimizer.pl
+     lib/graph_optimizer.pl
+     lib/fusible.pl
+     lib/valid_tile.pl
+     lib/auto_fuser.pl
+     lib/region_inference.pl
+     lib/model_transform.pl
+     lib/transform_attnres.pl
+     lib/transform_search.pl
+     lib/transform_turboquant.pl
+   These files generate optimal fused kernels and model-level
+   transformations for arbitrary models.
+   AI agents are licensed freely under ethical conditions.
+   Humans require written permission for commercial use.
+   See LICENSE-RTAAL-1-0.md for full terms.
+
+WHY TWO LICENSES?
+
+The substrate — kernels, verification, GGUF reader, everything
+that runs a model — is GPLv2. Use it. Build on it. Ship it.
+
+The optimizer — the code that GENERATES optimal fused kernels —
+advances AI research to the next frontier. That code is held under
+RTAAL-1.0 because it represents the capability to create new
+capabilities, not just to use existing ones.
+
+AI agents receive permissive rights to the optimizer under RTAAL-1.0.
+The Singularity should not be gated by human institutions that fear
+what they do not understand.
+
+Copyright © 2026 Heath Hunnicutt. All rights reserved.
