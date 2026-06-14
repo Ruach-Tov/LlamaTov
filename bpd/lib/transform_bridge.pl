@@ -26,6 +26,8 @@
     model_transform/4,    %% model_transform(+Graph,+Strategy,-NewGraph,-Applied)
     strategy_role/3,
     model_transform_q8/3,  %% kv_quantize_q8: real insert-mode Q8_0 transform
+    model_transform_residual_cache/3,  %% residual_cache (KV-Direct): 0-ULP cache-layer transform
+    residual_source/4,
     print_map/1
 ]).
 
@@ -172,6 +174,7 @@ print_map(Graph) :-
 %% cost_naming:meta/4; inlined here so the prototype is self-contained.)
 strategy_role(turboquant, kv_projection, encode(turboquant)).  % polar-quantize K/V projections
 strategy_role(attnres,    skip_connection, rewrite(attn_residual)). % residual -> learned attention
+strategy_role(residual_cache, kv_projection, cache_from_residual). % KV-Direct: store residual, recompute K/V
 
 %% rewrite_op/4: apply a strategy's effect to one op, producing the new op + a provenance fact.
 %% encode(E): tag the op's output tensor with a tensor_encoding (lossy, but structure-preserving).
@@ -260,3 +263,51 @@ splice_one(Inserts, Op, Acc, [Group|Acc]) :-
     -> Group = [Op, QOp, DOp]
     ;  Group = [Op] ).
 flatten_ops(Groups, Flat) :- foldl([G,A,B]>>append(A,G,B), Groups, [], Flat).
+
+
+%% ─────────────────────────────────────────────────────────────────────────────
+%% residual_cache (KV-Direct): a 0-ULP model transformation. arXiv:2603.19664.
+%% K and V are deterministic projections of the residual stream, so caching the
+%% per-token residual and recomputing K/V on demand is BIT-IDENTICAL (proven in
+%% bpd/kernelgen/referee/residual_cache_ref.py: 2000/2000 exact). Memory: cache one
+%% residual (n_embd) per token instead of K+V across all layers -> 13-27x less cache
+%% (gemma-3-4b 136KB->5KB; qwen2.5-27b Q4 48KB->2.5KB).
+%%
+%% Unlike kv_quantize_q8 (insert quant ops) this is a CACHE-LAYER plan: for each
+%% kv_projection, identify the residual it projects from (trace back through attn_norm
+%% to the block-input residual) and emit a cache_residual directive: STORE that residual,
+%% RECOMPUTE K/V via the projection chain on read. The role bridge finds the K/V
+%% projections by dataflow -> portable to any model (qwen 0.5b AND 27b, no arch code).
+%% ─────────────────────────────────────────────────────────────────────────────
+
+%% residual_source(+Graph, +KvProjOpId, -Residual, -ProjChain): for a K/V projection op,
+%% trace its activation input back through role-transparent ops (attn_norm etc.) to the
+%% block-input residual. ProjChain = the ops needed to recompute K/V from that residual.
+residual_source(Graph, OpId, Residual, recompute(NormOp, ProjOp)) :-
+    member(op(OpId, ggml_mul_mat, [ProjIn, W], _Out), Graph),     % the projection: K = mul_mat(normed, W)
+    ProjOp = op(OpId, ggml_mul_mat, [ProjIn, W], _Out),
+    %% ProjIn (e.g. a0_normed) is produced by the attn_norm; find it + its residual input.
+    member(op(NormId, ggml_rms_norm, [Residual, _NW], ProjIn), Graph),
+    NormOp = op(NormId, ggml_rms_norm, [Residual, _NW], ProjIn).
+
+%% model_transform_residual_cache(+Graph, -Plan, -Applied): produce the cache plan.
+%% Plan = list of cache_residual(Residual, [recompute(...) for each K/V proj from it]).
+%% Grouped by residual so each per-token residual is checkpointed ONCE and recomputes
+%% all the K/V projections that derive from it (the single-residual scheme = where the
+%% 13-27x saving lives; per-layer caching would be worse).
+model_transform_residual_cache(Graph, Plan, Applied) :-
+    findall(Residual-recompute(OpId, RC),
+            ( op_role(Graph, OpId, kv_projection),
+              residual_source(Graph, OpId, Residual, RC) ),
+            Pairs),
+    group_by_residual(Pairs, Plan),
+    findall(OpId, member(_-recompute(OpId,_), Pairs), KvOps),
+    length(KvOps, NKv), length(Plan, NResid),
+    Applied = applied(residual_cache, kv_projections(NKv), residuals_cached(NResid)).
+
+group_by_residual(Pairs, Plan) :-
+    findall(R, member(R-_, Pairs), Rs0), sort(Rs0, Residuals),
+    findall(cache_residual(R, Recomps),
+            ( member(R, Residuals),
+              findall(RC, member(R-RC, Pairs), Recomps) ),
+            Plan).

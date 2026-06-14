@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """LlamaTov: Multi-architecture GGUF inference. Benchmark runner."""
 import numpy as np, torch, torch.nn.functional as F, struct, sys, time
 
@@ -136,6 +134,37 @@ def dq4_0(path, off, nel, shape):
     # GGUF stores 2D tensors with ne0 fastest, so for 2D we reshape to
     # [ne1, ne0] then transpose. For non-2D, straight reshape works.
     flat = (d[:,None] * q)
+    if len(shape) == 2:
+        ne0, ne1 = shape
+        return torch.from_numpy(flat.reshape([ne1, ne0]).T.copy())
+    return torch.from_numpy(flat.reshape(shape).copy())
+
+def dq5_0(path, off, nel, shape):
+    """Q5_0 dequantization (ggml type 6). Mirrors dq4_0's correctness-fixed nibble ordering, plus the
+    5th bit pulled from the per-element qh bitfield, per ggml/src/ggml-quants.c:dequantize_row_q5_0.
+
+    ggml Q5_0 block = 22 bytes per 32 elements:
+      bytes 0..1   : fp16 scale d
+      bytes 2..5   : uint32 qh (little-endian) — bit i is the 5th (high) bit of element i, i=0..31
+      bytes 6..21  : 16 bytes qs — 32 low-4-bit nibbles, SAME packing as Q4_0:
+                       byte j: low nibble -> output pos j ; high nibble -> output pos j+16
+    Value = d * ( ((qs_nibble | (qh_bit << 4))) - 16 )      [5-bit signed-ish, offset 16]
+    """
+    nb = nel // 32; bsz = 22
+    with open(path, 'rb') as f:
+        f.seek(off); raw = np.frombuffer(f.read(nb*bsz), dtype=np.uint8)
+    bl = raw.reshape(nb, bsz)
+    d = np.frombuffer(bl[:, :2].tobytes(), dtype=np.float16).astype(np.float32).reshape(nb)
+    qh = np.frombuffer(bl[:, 2:6].tobytes(), dtype=np.uint32).reshape(nb)   # (nb,) 32 high-bits packed
+    qs = bl[:, 6:]                                                          # (nb, 16) low nibbles
+    lo = (qs & 0x0F).astype(np.uint32)        # (nb,16) -> output positions 0..15
+    hi = (qs >> 4).astype(np.uint32)          # (nb,16) -> output positions 16..31
+    low_nib = np.concatenate([lo, hi], axis=-1)                            # (nb,32) ggml order
+    # the 5th bit for output position i is bit i of qh
+    bit_idx = np.arange(32, dtype=np.uint32)
+    qh5 = ((qh[:, None] >> bit_idx[None, :]) & 1).astype(np.uint32)         # (nb,32)
+    q = ((low_nib | (qh5 << 4)).astype(np.float32)) - 16.0                  # 5-bit value, offset 16
+    flat = (d[:, None] * q)
     if len(shape) == 2:
         ne0, ne1 = shape
         return torch.from_numpy(flat.reshape([ne1, ne0]).T.copy())
@@ -458,7 +487,7 @@ def lt(path, do, info):
     for d in dims: cnt *= d
     loaders = {0: lambda: torch.from_numpy(np.fromfile(path,dtype='float32',count=cnt,offset=off).copy()).reshape(dims[::-1]).T if len(dims)==2 else torch.from_numpy(np.fromfile(path,dtype='float32',count=cnt,offset=off).copy()).reshape(dims),
                1: lambda: torch.from_numpy(np.fromfile(path,dtype='float16',count=cnt,offset=off).astype('float32').copy()).reshape(dims[::-1]).T.contiguous() if len(dims)==2 else torch.from_numpy(np.fromfile(path,dtype='float16',count=cnt,offset=off).astype('float32').copy()).reshape(dims),
-               2: lambda: dq4_0(path,off,cnt,dims), 8: lambda: dq8_0(path,off,cnt,dims),
+               2: lambda: dq4_0(path,off,cnt,dims), 6: lambda: dq5_0(path,off,cnt,dims), 8: lambda: dq8_0(path,off,cnt,dims),
                10: lambda: dq2k(path,off,cnt,dims), 11: lambda: dq3k(path,off,cnt,dims),
                12: lambda: dq4k(path,off,cnt,dims), 13: lambda: dq5k(path,off,cnt,dims),
                14: lambda: dq6k(path,off,cnt,dims)}
@@ -511,7 +540,7 @@ def apply_rope(q, k, n_head, head_dim, theta=500000.0, positions=None):
 def llama_layer(w, x, il, cfg):
     """Llama-family layer: RMSNorm, separate QKV, RoPE, GQA, SwiGLU."""
     p = f'blk.{il}'
-    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg['n_embd'] // nh
+    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg.get('head_dim') or (cfg['n_embd'] // nh)
     
     # Attention norm
     h = rms_norm(x, w[f'{p}.attn_norm.weight'], cfg.get('norm_eps', 1e-5))
@@ -565,7 +594,7 @@ def gemma_layer(w, x, il, cfg):
     Per ggml's src/models/gemma.cpp graph::graph constructor.
     """
     p = f'blk.{il}'
-    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg['n_embd'] // nh
+    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg.get('head_dim') or (cfg['n_embd'] // nh)
 
     # Attention norm
     h = rms_norm(x, w[f'{p}.attn_norm.weight'], cfg.get('norm_eps', 1e-5))
@@ -633,7 +662,7 @@ def gemma2_layer(w, x, il, cfg):
     Per ggml's src/models/gemma2.cpp graph::graph constructor.
     """
     p = f'blk.{il}'
-    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg['n_embd'] // nh
+    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg.get('head_dim') or (cfg['n_embd'] // nh)
 
     # ATTN: norm → QKV → RoPE → scale Q → attention → POST-NORM → residual
     h = rms_norm(x, w[f'{p}.attn_norm.weight'], cfg.get('norm_eps', 1e-5))
@@ -705,7 +734,7 @@ def phi3_layer(w, x, il, cfg):
     Per ggml's src/models/phi3.cpp graph<iswa>::graph constructor.
     """
     p = f'blk.{il}'
-    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg['n_embd'] // nh
+    nh = cfg['n_head']; nkv = cfg.get('n_head_kv', nh); hd = cfg.get('head_dim') or (cfg['n_embd'] // nh)
 
     # Attention norm
     h = rms_norm(x, w[f'{p}.attn_norm.weight'], cfg.get('norm_eps', 1e-5))
@@ -829,6 +858,7 @@ def run(path, input_ids, n_predict=1):
         'n_layers': md.get(f'{arch}.block_count', 12),
         'n_head': md.get(f'{arch}.attention.head_count', 12),
         'n_head_kv': md.get(f'{arch}.attention.head_count_kv', md.get(f'{arch}.attention.head_count', 12)),
+        'head_dim': md.get(f'{arch}.attention.key_length', None),  # Qwen3 etc. decouple head_dim from embd//n_head
         'n_embd': md.get(f'{arch}.embedding_length', 768),
         'n_ff': md.get(f'{arch}.feed_forward_length', 3072),
         'rope_theta': md.get(f'{arch}.rope.freq_base', 500000.0),
@@ -898,12 +928,13 @@ def generate(path, input_ids, n_tokens=20, device="cpu"):
         'n_layers': md.get(f'{arch}.block_count', 12),
         'n_head': md.get(f'{arch}.attention.head_count', 12),
         'n_head_kv': md.get(f'{arch}.attention.head_count_kv', md.get(f'{arch}.attention.head_count', 12)),
+        'head_dim': md.get(f'{arch}.attention.key_length', None),  # Qwen3 etc. decouple head_dim from embd//n_head
         'n_embd': md.get(f'{arch}.embedding_length', 768),
         'rope_theta': md.get(f'{arch}.rope.freq_base', 500000.0),
         'norm_eps': md.get(f'{arch}.attention.layer_norm_rms_epsilon',
                     md.get(f'{arch}.attention.layer_norm_epsilon', 1e-5)),
     }
-    nh = cfg['n_head']; nkv = cfg['n_head_kv']; hd = cfg['n_embd'] // nh
+    nh = cfg['n_head']; nkv = cfg['n_head_kv']; hd = cfg.get('head_dim') or (cfg['n_embd'] // nh)
     nl = cfg['n_layers']
     
     print(f"Arch: {arch}, layers: {nl}, heads: {nh}/{nkv}, embd: {cfg['n_embd']}")
@@ -974,6 +1005,16 @@ def generate(path, input_ids, n_tokens=20, device="cpu"):
                     q_cur = q_cur + w[f'{p}.attn_q.bias']
                     k_cur = k_cur + w[f'{p}.attn_k.bias']
                     v_cur = v_cur + w[f'{p}.attn_v.bias']
+                # Qwen3-style per-head QK-norm: RMSNorm each head (over head_dim) BEFORE RoPE,
+                # using attn_q_norm / attn_k_norm. Only applied if the weights exist (Qwen3, Gemma2).
+                if f'{p}.attn_q_norm.weight' in w:
+                    Bq, Tq, _ = q_cur.shape
+                    qh = q_cur.view(Bq, Tq, nh, hd)
+                    kh = k_cur.view(Bq, Tq, nkv, hd)
+                    qh = rms_norm(qh, w[f'{p}.attn_q_norm.weight'], cfg['norm_eps'])
+                    kh = rms_norm(kh, w[f'{p}.attn_k_norm.weight'], cfg['norm_eps'])
+                    q_cur = qh.reshape(Bq, Tq, nh * hd)
+                    k_cur = kh.reshape(Bq, Tq, nkv * hd)
                 # RoPE — pass positions explicitly so decode steps rotate
                 # at the absolute sequence position, not the relative T_cur=0
                 # (this is the correction-13 fix for the repeating-token bug)
@@ -1069,12 +1110,34 @@ def generate(path, input_ids, n_tokens=20, device="cpu"):
     return generated, tok_per_sec
 
 
+
+
+def generate_logits(path, input_ids):
+    """Forced-decode primitive: ONE forward over input_ids -> final-position logit vector (numpy) +
+    argmax token. Reuses generate()'s tested forward via a logit-capture patch. For the xrt referee."""
+    import torch as _t, numpy as _np
+    cap = {}
+    real = _t.Tensor.argmax
+    def _wrap(self, *a, **k):
+        if self.dim() >= 1 and self.shape[-1] > 1000 and 'l' not in cap:
+            v = self.reshape(-1, self.shape[-1])[-1] if self.dim() > 1 else self
+            cap['l'] = v.detach().float().cpu().numpy().copy()
+        return real(self, *a, **k)
+    _t.Tensor.argmax = _wrap
+    try:
+        generate(path, list(input_ids), n_tokens=1)
+    finally:
+        _t.Tensor.argmax = real
+    lg = cap.get('l')
+    return lg, (int(lg.argmax()) if lg is not None else None)
+
+
 if __name__ == '__main__':
     import sys
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     flags = [a for a in sys.argv[1:] if a.startswith('--')]
     
-    p = args[0] if args else '/tmp/llamatov-data/model-zoo/gpt2-124m-Q2_K.gguf'
+    p = args[0] if args else 'models/model.gguf'
     ids = [int(x) for x in args[1].split(',')] if len(args) > 1 else [1, 15043]
     
     if '--generate' in flags:
