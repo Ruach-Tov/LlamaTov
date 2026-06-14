@@ -37,6 +37,8 @@ The following files are RTAAL-1.1-only:
 - `bpd/lib/gguf_to_graph.py` — derives a model compute graph from a live GGUF (the map source)
 - `bpd/lib/turboquant_ref.py` — the TurboQuant rotation+scalar-quant core (arXiv:2504.19874)
 - `bpd/lib/turboquant_innerprod.py` — inner-product fidelity analysis for the K/V quant transforms
+- `bpd/lib/moe_dispatch.pl` — the MoE op_kind->kernel-template dispatch glue
+- `bpd/lib/kernel_templates_moe.pl` — c_ast kernel templates for MoE routing (top_k, get_rows, weighted_scatter_add)
 - `bpd/kernelgen/referee/referee_kv_quant.py`, `kv_q8_kernel.py`, `kv_quant_e2e.py` — the kv_quantize_q8 transform referee, GPU round-trip kernel, and end-to-end decode-coherence check
 
 SPDX identifier on these files:

@@ -88,11 +88,22 @@ op_role(Graph, OpId, q_projection) :-
     attention_qkv(Graph, _Attn, Q, _K, _V),
     reaches(Graph, Out, Q).
 
-%% ffn_projection: a projection reaching NO attention slot.
+%% router_projection (MoE): a projection whose output feeds a ggml_top_k (the expert router).
+%% NEW role — feeds the router, not the residual stream or attention. Distinct from ffn_projection.
+feeds_topk(Graph, Out) :-
+    member(op(_, ggml_top_k, Ins, _), Graph), Ins = [First|_], First == Out.
+op_role(Graph, OpId, router_projection) :-
+    op_kind_in(Graph, OpId, Kind), tap_type(Kind, projection),
+    op_output_in(Graph, OpId, Out),
+    feeds_topk(Graph, Out).
+
+%% ffn_projection: a projection reaching NO attention slot AND not the router.
+%% (In MoE, each expert's gate/up/down mul_mat is ffn_projection by dataflow; the router is excluded.)
 op_role(Graph, OpId, ffn_projection) :-
     op_kind_in(Graph, OpId, Kind), tap_type(Kind, projection),
     op_output_in(Graph, OpId, Out),
-    \+ ( attention_qkv(Graph, _, Q, K, V), member(S, [Q,K,V]), reaches(Graph, Out, S) ).
+    \+ ( attention_qkv(Graph, _, Q, K, V), member(S, [Q,K,V]), reaches(Graph, Out, S) ),
+    \+ feeds_topk(Graph, Out).
 
 %% skip_connection: a TRUE residual add (AttnRes attaches), NOT a weight-bias add.
 %% Distinguisher: a residual add adds two ACTIVATIONS; a bias add adds an activation +

@@ -76,16 +76,52 @@ def emit_layer(L, struct, out):
     P(f"op(id({L},resid_attn), ggml_add, [{a('resid_in')}, {a('o_raw')}], {a('resid_mid')}).")
     # FFN
     P(f"op(id({L},ffn_norm), ggml_rms_norm, [{a('resid_mid')}, {t('ffn_norm.weight')}], {a('ffn_normed')}).")
-    if struct["ffn_gate"]:
+    if struct.get("moe"):
+        emit_moe_ffn(L, struct, t, a, P)
+    elif struct["ffn_gate"]:
         P(f"op(id({L},ffn_gate), ggml_mul_mat, [{a('ffn_normed')}, {t('ffn_gate.weight')}], {a('gate')}).")
         P(f"op(id({L},ffn_up),   ggml_mul_mat, [{a('ffn_normed')}, {t('ffn_up.weight')}], {a('up')}).")
         P(f"op(id({L},ffn_silu), ggml_silu, [{a('gate')}], {a('gact')}).")
         P(f"op(id({L},ffn_gu),   ggml_mul, [{a('gact')}, {a('up')}], {a('gu')}).")
         P(f"op(id({L},ffn_down), ggml_mul_mat, [{a('gu')}, {t('ffn_down.weight')}], {a('down')}).")
+        P(f"op(id({L},resid_ffn), ggml_add, [{a('resid_mid')}, {a('down')}], {a('resid_out')}).")
+        return
     else:  # plain MLP
         P(f"op(id({L},ffn_up),   ggml_mul_mat, [{a('ffn_normed')}, {t('ffn_up.weight')}], {a('up')}).")
         P(f"op(id({L},ffn_silu), ggml_silu, [{a('up')}], {a('gact')}).")
         P(f"op(id({L},ffn_down), ggml_mul_mat, [{a('gact')}, {t('ffn_down.weight')}], {a('down')}).")
+        P(f"op(id({L},resid_ffn), ggml_add, [{a('resid_mid')}, {a('down')}], {a('resid_out')}).")
+
+
+def emit_moe_ffn(L, struct, t, a, P):
+    """MoE FFN: router -> top-k select -> static-k expert unroll (gather + gate/up/down) -> weighted
+    combine -> residual. Static k from {arch}.expert_used_count. New op_kinds: ggml_top_k,
+    ggml_get_rows (gather an expert's weight slice), weighted_scatter_add (gate-weighted combine).
+    Role inference: each expert's gate/up/down mul_mat is ffn_projection by dataflow; the router
+    mul_mat is router_projection (feeds the router, not the residual stream)."""
+    k = struct["moe_top_k"]            # e.g. Mixtral=2, Qwen-MoE=4
+    normed = a("ffn_normed")
+    # 1. router projection (NEW role: router_projection)
+    P(f"op(id({L},router), ggml_mul_mat, [{normed}, {t('ffn_gate_inp.weight')}], {a('router_logits')}).")
+    # 2. top-k select: produces selected expert ids + their gate weights (data-dependent control flow)
+    P(f"op(id({L},topk), ggml_top_k, [{a('router_logits')}, k{k}], {a('expert_sel')}).")
+    out_syms = []
+    for j in range(k):
+        # 3a. gather expert j's weight slices (ggml_get_rows over the stacked-experts dim)
+        P(f"op(id({L},gather_g_{j}), ggml_get_rows, [{t('ffn_gate_exps.weight')}, {a('expert_sel')}], {a(f'wg_{j}')}).")
+        P(f"op(id({L},gather_u_{j}), ggml_get_rows, [{t('ffn_up_exps.weight')}, {a('expert_sel')}], {a(f'wu_{j}')}).")
+        P(f"op(id({L},gather_d_{j}), ggml_get_rows, [{t('ffn_down_exps.weight')}, {a('expert_sel')}], {a(f'wd_{j}')}).")
+        # 3b. the expert FFN (gate/up/down) — each mul_mat is ffn_projection by dataflow
+        P(f"op(id({L},eg_{j}), ggml_mul_mat, [{normed}, {a(f'wg_{j}')}], {a(f'g_{j}')}).")
+        P(f"op(id({L},eu_{j}), ggml_mul_mat, [{normed}, {a(f'wu_{j}')}], {a(f'u_{j}')}).")
+        P(f"op(id({L},es_{j}), ggml_silu, [{a(f'g_{j}')}], {a(f'ga_{j}')}).")
+        P(f"op(id({L},em_{j}), ggml_mul, [{a(f'ga_{j}')}, {a(f'u_{j}')}], {a(f'gu_{j}')}).")
+        P(f"op(id({L},ed_{j}), ggml_mul_mat, [{a(f'gu_{j}')}, {a(f'wd_{j}')}], {a(f'eout_{j}')}).")
+        out_syms.append(a(f'eout_{j}'))
+    # 4. weighted combine: sum_j gate_j * eout_j  (reuses BLAS weighted-reduction)
+    combine_ins = ", ".join(out_syms) + f", {a('expert_sel')}"
+    P(f"op(id({L},combine), weighted_scatter_add, [{combine_ins}], {a('down')}).")
+    # 5. residual
     P(f"op(id({L},resid_ffn), ggml_add, [{a('resid_mid')}, {a('down')}], {a('resid_out')}).")
 
 
@@ -99,16 +135,17 @@ def main():
     if "--layers" in sys.argv:
         nlayers = int(sys.argv[sys.argv.index("--layers")+1])
     struct = detect_layer_structure(ts, 0)
-    # Honest scope guard: this deriver builds the standard decoder-transformer skeleton (norm -> QKV
-    # [+bias] [+qk-norm] -> rope -> attention -> o_proj -> residual -> [gated|plain] FFN -> residual).
-    # MoE (routed experts) and SSM/Mamba layers have a fundamentally different graph; refuse rather
-    # than emit a wrong map. (Detected from the tensor list; extend emit_layer to support them.)
+    # MoE: read the static top-k (compile-time constant per model) from the GGUF metadata.
     if struct.get("moe"):
-        print(f"ERROR: arch={arch} uses MoE (routed experts); the dense-FFN deriver would mis-map it. "
-              f"MoE support not yet implemented.", file=sys.stderr); sys.exit(2)
+        struct["moe_top_k"] = md.get(f"{arch}.expert_used_count", 2)
+        struct["moe_n_experts"] = md.get(f"{arch}.expert_count", 8)
+    # Honest scope guard: this deriver builds the decoder-transformer skeleton (norm -> QKV [+bias]
+    # [+qk-norm] -> rope -> attention -> o_proj -> residual -> [dense|MoE] FFN -> residual). MoE is now
+    # supported (router + static-k expert unroll). SSM/Mamba (recurrent scan, no attention) is a
+    # different structural arc — refuse rather than mis-map.
     if struct.get("ssm"):
-        print(f"ERROR: arch={arch} has SSM/Mamba layers (no attention); not a decoder-transformer. "
-              f"SSM support not yet implemented.", file=sys.stderr); sys.exit(2)
+        print(f"ERROR: arch={arch} has SSM/Mamba layers (recurrent scan, no attention); not a "
+              f"decoder-transformer. SSM support not yet implemented.", file=sys.stderr); sys.exit(2)
     out = []
     out.append(f"%% Auto-derived compute graph for arch={arch}, layers={nlayers}.")
     out.append(f"%% structure: {struct}")
