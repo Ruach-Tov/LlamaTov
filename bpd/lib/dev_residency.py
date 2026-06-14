@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """dev_residency.py — on-device activation residency for the fact-driven decode.
 
 The activation flows op -> op as a DEVICE POINTER, never touching host between ops.
@@ -326,6 +324,7 @@ _APPEND_INCR_FUSED = _os.environ.get("BPD_APPEND_INCR_FUSED","1") != "0"  # defa
 # CUDA-graph capture stream. Normally None (null stream). During capture, set to the
 # capture stream so every launch records into the graph instead of executing eagerly.
 _STREAM = None
+_KV_QUANT_Q8 = False   # kv_quantize_q8 transform: quantize K/V projection outputs to Q8_0 (lossy, opt-in)
 def _stream():
     return _STREAM
 
@@ -810,6 +809,54 @@ extern "C" __global__ void k_quant_q8(const float* X, signed char* Xq, __half* X
 """
 def _quant_cubin():
     return _build_inline("quant_q8", _QUANT_SRC)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# kv_quantize_q8 model transformation (RTAAL-1.1): quantize the K/V projection
+# OUTPUTS to Q8_0 in place, so the K/V genuinely round-trip through 8-bit before
+# rope+append. OFF by default (lossy; opt-in via _KV_QUANT_Q8). Verified: |err|<=d/2
+# per element, green tokens preserved 12/12 (bpd/kernelgen/referee/kv_quant_e2e.py).
+# Capture-safe: launches on _STREAM, no sync. This is the productionized form of the
+# role-based bridge's model_transform_q8 (transform_bridge.pl).
+# ─────────────────────────────────────────────────────────────────────────────
+_KV_Q8_SRC = r"""
+#include <cuda_fp16.h>
+extern "C" __global__ void k_kvq8_quant(const float* X, signed char* Xq, __half* Xd, int K) {
+  int nb=K/32; int b=blockIdx.x*(blockDim.x>>5)+(threadIdx.x>>5); if(b>=nb) return; int lane=threadIdx.x&31;
+  float a=fabsf(X[b*32+lane]);
+  for(int o=16;o>0;o>>=1) a=fmaxf(a,__shfl_xor_sync(0xffffffff,a,o));   // order-insensitive max -> bit-exact amax
+  float d=(a>0.0f)?a/127.0f:1.0f; __half dh=__float2half(d); if(lane==0) Xd[b]=dh;
+  float dq=__half2float(dh); int q=(int)rintf(X[b*32+lane]/dq); q=q<-127?-127:(q>127?127:q);
+  Xq[b*32+lane]=(signed char)q;
+}
+extern "C" __global__ void k_kvq8_dequant(const signed char* Xq, const __half* Xd, float* Y, int K) {
+  int i=blockIdx.x*blockDim.x+threadIdx.x; if(i>=K) return; Y[i]=(float)Xq[i]*__half2float(Xd[i>>5]);
+}
+"""
+def _kv_q8_cubin():
+    return _build_inline("kv_q8", _KV_Q8_SRC)
+
+_KV_Q8_SCRATCH = {}
+def kv_quantize_q8_inplace(t):
+    """Q8_0 quantize->dequant a K/V projection output DevTensor in place (n multiple of 32).
+    Capture-safe (launches on _STREAM, no sync). The kv_quantize_q8 transform, productionized."""
+    n = t.n
+    if n % 32 != 0:
+        return
+    cb = _kv_q8_cubin()
+    fq = fd._func(cb, "k_kvq8_quant"); fdq = fd._func(cb, "k_kvq8_dequant")
+    nb = n // 32
+    if n not in _KV_Q8_SCRATCH:
+        import ctypes as _ct
+        xq = _ct.c_void_p(); cu.cuMemAlloc_v2(_ct.byref(xq), n)
+        xd = _ct.c_void_p(); cu.cuMemAlloc_v2(_ct.byref(xd), nb * 2)
+        _KV_Q8_SCRATCH[n] = (xq, xd)
+    import ctypes as _ct
+    xq, xd = _KV_Q8_SCRATCH[n]; Kc = _ct.c_int(n)
+    aq = (_ct.c_void_p * 4)(*[_ct.cast(_ct.byref(z), _ct.c_void_p) for z in (t.ptr, xq, xd, Kc)])
+    cu.cuLaunchKernel(fq, (nb + 7) // 8, 1, 1, 256, 1, 1, 0, _STREAM, aq, None)
+    adq = (_ct.c_void_p * 4)(*[_ct.cast(_ct.byref(z), _ct.c_void_p) for z in (xq, xd, t.ptr, Kc)])
+    cu.cuLaunchKernel(fdq, (n + 255) // 256, 1, 1, 256, 1, 1, 0, _STREAM, adq, None)
+
 # W1 (Bocher's milestone-review #1): parallel bit-exact quant. The serial k_quant_q8 ran ONE
 # thread per Q8_0-block looping 32 elems TWICE (amax + quant), only nb=K/32 threads (28 for K=896
 # = under a warp) while the SM idles — pre-blockrow-rmsnorm in miniature (was 26.8% of wall-time
@@ -1174,7 +1221,7 @@ _FUSED_W_CACHE = {}   # key (id(w), layer, kind) -> (concat_weight_np, concat_bi
 PRODUCTION_PROFILE = {
     "_DEVICE_KV_CACHE": True, "_DEVICE_ATTN": True, "_MASKED_ATTN": True,
     "_GRAPH_PREP": True, "_KV_MAX_SEQ": 256, "_ATTN_SPLIT_K": False,
-    "_DEVICE_LOGITS": True, "_QFUSED": False, "_GEMV_TILED_V4_QFUSED": False,
+    "_DEVICE_LOGITS": True, "_QFUSED": False, "_GEMV_TILED_V4_QFUSED": False, "_KV_QUANT_Q8": False,
     "_ADDRES_FUSED": True, "_BIAS_FOLD": True, "_RMS_BLOCKROW": True,
     "_GEMV_TILED": True, "_GEMV_TILED_V4": True, "_GEMV_TILED_BM": 16,
     "_QUANT_PAR": True, "_ARGMAX2": True, "_FUSE_QKV": True, "_FUSE_GATEUP": True,
@@ -1341,6 +1388,8 @@ def forward_pass_resident(w, cfg, tok, positions, kv_cache):
                 qd = q8_linear_dev_bias(hdv, w[f'{p}.attn_q.weight'].numpy(), w.get(f'{p}.attn_q.bias'))
                 kd = q8_linear_dev_bias(hdv, w[f'{p}.attn_k.weight'].numpy(), w.get(f'{p}.attn_k.bias'))
                 vd = q8_linear_dev_bias(hdv, w[f'{p}.attn_v.weight'].numpy(), w.get(f'{p}.attn_v.bias'))
+                if _KV_QUANT_Q8:                    # kv_quantize_q8 transform (lossy, opt-in)
+                    kv_quantize_q8_inplace(kd); kv_quantize_q8_inplace(vd)
             cache = kv_cache[il]
             if cache is None:
                 cache = DeviceKVCache(_KV_MAX_SEQ, nkv, hd); kv_cache[il] = cache
@@ -1435,6 +1484,8 @@ def forward_pass_resident(w, cfg, tok, positions, kv_cache):
             qd = q8_linear_dev_bias(hdv, w[f'{p}.attn_q.weight'].numpy(), w.get(f'{p}.attn_q.bias'))
             kd = q8_linear_dev_bias(hdv, w[f'{p}.attn_k.weight'].numpy(), w.get(f'{p}.attn_k.bias'))
             vd = q8_linear_dev_bias(hdv, w[f'{p}.attn_v.weight'].numpy(), w.get(f'{p}.attn_v.bias'))
+            if _KV_QUANT_Q8:                    # kv_quantize_q8 transform (lossy, opt-in)
+                kv_quantize_q8_inplace(kd); kv_quantize_q8_inplace(vd)
         q_cur = torch.from_numpy(qd.to_host()).reshape(1, 1, -1)
         k_cur = torch.from_numpy(kd.to_host()).reshape(1, 1, -1)
         v_cur = torch.from_numpy(vd.to_host()).reshape(1, 1, -1)

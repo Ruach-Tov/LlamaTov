@@ -25,12 +25,19 @@ def detect_layer_structure(tensors, layer=0):
     """From the tensors of one layer, return the set of present roles (generic across architectures)."""
     pre = f"blk.{layer}."
     names = {n[len(pre):] for n in tensors if n.startswith(pre)}
+    moe = any(k in names for k in ("ffn_gate_exps.weight", "ffn_down_exps.weight"))
     return {
         "qkv_bias":  "attn_q.bias" in names,
         "ffn_gate":  "ffn_gate.weight" in names,        # gated FFN (silu(gate)*up) vs plain MLP
         "attn_norm": "attn_norm.weight" in names,
         "ffn_norm":  "ffn_norm.weight" in names,
         "o_proj":    "attn_output.weight" in names,
+        # next-variant detection (Gemma2/Qwen3/Cohere add per-head Q/K RMSNorm before rope):
+        "qk_norm":   "attn_q_norm.weight" in names or "attn_k_norm.weight" in names,
+        # MoE (Mixtral/Qwen-MoE/DeepSeek) replaces the dense FFN with routed experts:
+        "moe":       moe,
+        # SSM/Mamba layers (no attention) — detected so we can refuse honestly rather than misparse:
+        "ssm":       any("ssm_" in n for n in names),
     }
 
 
@@ -53,6 +60,12 @@ def emit_layer(L, struct, out):
     qin = a("q_b") if has_bias else a("q_raw")
     kin = a("k_b") if has_bias else a("k_raw")
     vin = a("v_b") if has_bias else a("v_raw")
+    # optional per-head Q/K RMSNorm (Gemma2/Qwen3/Cohere) — role-transparent, so role inference
+    # still traces K through it to attention.
+    if struct.get("qk_norm"):
+        P(f"op(id({L},q_norm), ggml_rms_norm, [{qin}, {t('attn_q_norm.weight')}], {a('q_n')}).")
+        P(f"op(id({L},k_norm), ggml_rms_norm, [{kin}, {t('attn_k_norm.weight')}], {a('k_n')}).")
+        qin, kin = a("q_n"), a("k_n")
     # rope on Q,K (V un-roped)
     P(f"op(id({L},q_rope), ggml_rope, [{qin}], {a('q_rope')}).")
     P(f"op(id({L},k_rope), ggml_rope, [{kin}], {a('k_rope')}).")
@@ -86,6 +99,16 @@ def main():
     if "--layers" in sys.argv:
         nlayers = int(sys.argv[sys.argv.index("--layers")+1])
     struct = detect_layer_structure(ts, 0)
+    # Honest scope guard: this deriver builds the standard decoder-transformer skeleton (norm -> QKV
+    # [+bias] [+qk-norm] -> rope -> attention -> o_proj -> residual -> [gated|plain] FFN -> residual).
+    # MoE (routed experts) and SSM/Mamba layers have a fundamentally different graph; refuse rather
+    # than emit a wrong map. (Detected from the tensor list; extend emit_layer to support them.)
+    if struct.get("moe"):
+        print(f"ERROR: arch={arch} uses MoE (routed experts); the dense-FFN deriver would mis-map it. "
+              f"MoE support not yet implemented.", file=sys.stderr); sys.exit(2)
+    if struct.get("ssm"):
+        print(f"ERROR: arch={arch} has SSM/Mamba layers (no attention); not a decoder-transformer. "
+              f"SSM support not yet implemented.", file=sys.stderr); sys.exit(2)
     out = []
     out.append(f"%% Auto-derived compute graph for arch={arch}, layers={nlayers}.")
     out.append(f"%% structure: {struct}")
