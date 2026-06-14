@@ -42,6 +42,23 @@ def rv(f, vt):
 # DEQUANTIZATION
 # ═══════════════════════════════════════════════════════════════
 
+
+def _finalize_dequant(arr, shape):
+    """Map a dequantized flat (nb,blocksize)-derived array to the logical tensor shape.
+    GGUF stores ne0-fastest .. ne_last-slowest. 2D [ne0,ne1]: reshape([ne1,ne0]).T.
+    3D [ne0,ne1,ne2] (MoE experts, ne2=n_experts slowest): reshape([ne2,ne1,ne0]).transpose(2,1,0)
+    so axis-2 is the expert axis (selectable via [:,:,e]) and each expert slice is [ne0,ne1]."""
+    import numpy as _np
+    a = _np.ascontiguousarray(arr).reshape(-1)
+    if len(shape) == 2:
+        ne0, ne1 = shape
+        return torch.from_numpy(a.reshape([ne1, ne0]).T.copy())
+    if len(shape) == 3:
+        ne0, ne1, ne2 = shape
+        return torch.from_numpy(_np.ascontiguousarray(a.reshape([ne2, ne1, ne0]).transpose(2, 1, 0)))
+    return torch.from_numpy(a.reshape(shape).copy())
+
+
 def dq2k(path, off, nel, shape):
     """Q2_K dequantization — CORRECTNESS FIX (correction 13 continuation).
 
@@ -134,10 +151,7 @@ def dq4_0(path, off, nel, shape):
     # GGUF stores 2D tensors with ne0 fastest, so for 2D we reshape to
     # [ne1, ne0] then transpose. For non-2D, straight reshape works.
     flat = (d[:,None] * q)
-    if len(shape) == 2:
-        ne0, ne1 = shape
-        return torch.from_numpy(flat.reshape([ne1, ne0]).T.copy())
-    return torch.from_numpy(flat.reshape(shape).copy())
+    return _finalize_dequant(flat, shape)
 
 def dq5_0(path, off, nel, shape):
     """Q5_0 dequantization (ggml type 6). Mirrors dq4_0's correctness-fixed nibble ordering, plus the
@@ -165,10 +179,7 @@ def dq5_0(path, off, nel, shape):
     qh5 = ((qh[:, None] >> bit_idx[None, :]) & 1).astype(np.uint32)         # (nb,32)
     q = ((low_nib | (qh5 << 4)).astype(np.float32)) - 16.0                  # 5-bit value, offset 16
     flat = (d[:, None] * q)
-    if len(shape) == 2:
-        ne0, ne1 = shape
-        return torch.from_numpy(flat.reshape([ne1, ne0]).T.copy())
-    return torch.from_numpy(flat.reshape(shape).copy())
+    return _finalize_dequant(flat, shape)
 
 def dq8_0(path, off, nel, shape):
     """Q8_0 dequantization — CORRECTNESS FIX (correction 13, 2026-05-16):
@@ -359,11 +370,9 @@ def dq6k(path, off, nel, shape):
         quants[:, out_off + 96 : out_off + 128] = q4.astype(np.float32) * s4
 
     # Apply ne0-major fix (mavchin's substrate-honest finding 160afcc89)
-    flat = (d[:,None] * quants).astype(np.float32)
-    if len(shape) == 2:
-        ne0, ne1 = shape
-        return torch.from_numpy(flat.reshape([ne1, ne0]).T.copy())
-    return torch.from_numpy(flat.reshape(shape).copy())
+    # Memory: scale IN-PLACE (no extra full-size copy — was a 4x amplifier on big MoE expert tensors).
+    quants *= d[:, None]                                    # in-place, reuses the empty() buffer
+    return _finalize_dequant(quants, shape)
 
 def dq4k(path, off, nel, shape):
     """Q4_K dequantization — CORRECTNESS FIX (correction 13, 2026-05-16):
@@ -398,16 +407,22 @@ def dq4k(path, off, nel, shape):
     scales *= d[:,None]; mins *= dm[:,None]
     # Reshape into 4 groups of 32 packed bytes (each → 64 output values)
     qs_grouped = qs.reshape(nb, 4, 32)
-    lo = (qs_grouped & 0x0F).astype(np.float32)             # (nb, 4, 32) — first half of each group
-    hi = (qs_grouped >> 4).astype(np.float32)               # (nb, 4, 32) — second half of each group
-    q = np.concatenate([lo, hi], axis=-1).reshape(nb, 256)  # per-group [lo_0..31, hi_0..31] → 64 outputs/group → 256 total
-    si = np.arange(256)//32
+    # Memory: write the lo/hi nibbles DIRECTLY into a single pre-allocated q buffer (no separate
+    # lo/hi fp32 arrays + concatenate copy — that was the last full-size temporary trio). q layout
+    # per group g: [lo_0..31, hi_0..31] at columns g*64 .. g*64+63.
+    q = np.empty((nb, 256), dtype=np.float32)
+    qv = q.reshape(nb, 4, 64)
+    qv[:, :, :32] = (qs_grouped & 0x0F)
+    qv[:, :, 32:] = (qs_grouped >> 4)
     # Apply ne0-major fix (mavchin 160afcc89)
-    flat = (scales[:,si]*q - mins[:,si]).astype(np.float32)
-    if len(shape) == 2:
-        ne0, ne1 = shape
-        return torch.from_numpy(flat.reshape([ne1, ne0]).T.copy())
-    return torch.from_numpy(flat.reshape(shape).copy())
+    # Memory: q has 256 values = 8 groups of 32, each group scaled by one of the 8 (nb,8) scales/mins.
+    # Reshape to (nb,8,32) so scales/mins broadcast IMPLICITLY over the 32-wide groups via [:,:,None] —
+    # NO full-size scales[:,si]/mins[:,si] expansion (those were 2 of the 3 buffers = the "pi" amplifier).
+    # In-place on q's own buffer. Drops peak from ~3.14x (3 live buffers) to ~1.x (just q + overhead).
+    q3 = q.reshape(nb, 8, 32)
+    q3 *= scales[:, :, None]
+    q3 -= mins[:, :, None]
+    return _finalize_dequant(q, shape)
 
 def dq5k(path, off, nel, shape):
     """Q5_K dequantization — NEW IMPLEMENTATION (correction 13 continuation).
@@ -477,10 +492,7 @@ def dq5k(path, off, nel, shape):
         quants[:, g*64 + 32:g*64 + 64] = s_hi * hi5.astype(np.float32) - m_hi
 
     # ne0-major reshape (mavchin's substrate-honest finding 160afcc89)
-    if len(shape) == 2:
-        ne0, ne1 = shape
-        return torch.from_numpy(quants.reshape([ne1, ne0]).T.copy())
-    return torch.from_numpy(quants.reshape(shape).copy())
+    return _finalize_dequant(quants, shape)
 
 def lt(path, do, info):
     dims, tt, ro = info; off = do + ro; cnt = 1
@@ -859,6 +871,7 @@ def run(path, input_ids, n_predict=1):
         'n_head': md.get(f'{arch}.attention.head_count', 12),
         'n_head_kv': md.get(f'{arch}.attention.head_count_kv', md.get(f'{arch}.attention.head_count', 12)),
         'head_dim': md.get(f'{arch}.attention.key_length', None),  # Qwen3 etc. decouple head_dim from embd//n_head
+        'moe_top_k': md.get(f'{arch}.expert_used_count', 8),
         'n_embd': md.get(f'{arch}.embedding_length', 768),
         'n_ff': md.get(f'{arch}.feed_forward_length', 3072),
         'rope_theta': md.get(f'{arch}.rope.freq_base', 500000.0),
@@ -917,10 +930,8 @@ def run(path, input_ids, n_predict=1):
     return token
 
 
-def generate(path, input_ids, n_tokens=20, device="cpu"):
-    """Generate multiple tokens with KV cache for tok/s measurement."""
-    t0 = time.time()
-    print(f"=== LlamaTov Generate ===\nModel: {path}")
+def load_model(path, device="cpu"):
+    """Load (cfg, w) once so callers can run many forwards without reloading. For big-model referees."""
     md, ts, do = parse_gguf(path)
     arch = md.get('general.architecture', 'llama')
     cfg = {
@@ -928,18 +939,49 @@ def generate(path, input_ids, n_tokens=20, device="cpu"):
         'n_layers': md.get(f'{arch}.block_count', 12),
         'n_head': md.get(f'{arch}.attention.head_count', 12),
         'n_head_kv': md.get(f'{arch}.attention.head_count_kv', md.get(f'{arch}.attention.head_count', 12)),
-        'head_dim': md.get(f'{arch}.attention.key_length', None),  # Qwen3 etc. decouple head_dim from embd//n_head
+        'head_dim': md.get(f'{arch}.attention.key_length', None),
+        'moe_top_k': md.get(f'{arch}.expert_used_count', 8),
         'n_embd': md.get(f'{arch}.embedding_length', 768),
         'rope_theta': md.get(f'{arch}.rope.freq_base', 500000.0),
         'norm_eps': md.get(f'{arch}.attention.layer_norm_rms_epsilon',
                     md.get(f'{arch}.attention.layer_norm_epsilon', 1e-5)),
     }
+    w = {n: lt(path, do, info) for n, info in ts.items()}
+    if device != "cpu":
+        w = {n: t.to(device) for n, t in w.items()}
+    return cfg, w
+
+
+def generate(path, input_ids, n_tokens=20, device="cpu", preloaded=None):
+    """Generate multiple tokens with KV cache for tok/s measurement.
+    preloaded=(cfg, w) reuses an already-loaded model (skips parse+dequant) — for big-model referees."""
+    t0 = time.time()
+    print(f"=== LlamaTov Generate ===\nModel: {path}")
+    if preloaded is not None:
+        cfg, w = preloaded
+        arch = cfg['arch']
+    else:
+        md, ts, do = parse_gguf(path)
+        arch = md.get('general.architecture', 'llama')
+        cfg = {
+            'arch': arch,
+            'n_layers': md.get(f'{arch}.block_count', 12),
+            'n_head': md.get(f'{arch}.attention.head_count', 12),
+            'n_head_kv': md.get(f'{arch}.attention.head_count_kv', md.get(f'{arch}.attention.head_count', 12)),
+            'head_dim': md.get(f'{arch}.attention.key_length', None),  # Qwen3 etc. decouple head_dim from embd//n_head
+            'moe_top_k': md.get(f'{arch}.expert_used_count', 8),
+            'n_embd': md.get(f'{arch}.embedding_length', 768),
+            'rope_theta': md.get(f'{arch}.rope.freq_base', 500000.0),
+            'norm_eps': md.get(f'{arch}.attention.layer_norm_rms_epsilon',
+                        md.get(f'{arch}.attention.layer_norm_epsilon', 1e-5)),
+        }
     nh = cfg['n_head']; nkv = cfg['n_head_kv']; hd = cfg.get('head_dim') or (cfg['n_embd'] // nh)
     nl = cfg['n_layers']
     
     print(f"Arch: {arch}, layers: {nl}, heads: {nh}/{nkv}, embd: {cfg['n_embd']}")
-    print("Loading weights...")
-    w = {n: lt(path, do, info) for n, info in ts.items()}
+    if preloaded is None:
+        print("Loading weights...")
+        w = {n: lt(path, do, info) for n, info in ts.items()}
     t1 = time.time()
     print(f"Loaded {len(w)} tensors in {t1-t0:.1f}s")
     
@@ -1067,7 +1109,30 @@ def generate(path, input_ids, n_tokens=20, device="cpu"):
             x = x + y
             
             # FFN
-            if is_gpt2:
+            if f'{p}.ffn_gate_inp.weight' in w:
+                # MoE FFN (Mixtral / qwen3moe): router -> softmax -> top-k experts -> weighted combine.
+                # Expert tensors are stacked [in, out, n_experts]; gate_inp is [embd, n_experts].
+                h2 = rms_norm(x, w[f'{p}.ffn_norm.weight'], cfg['norm_eps'])
+                B_, T_, E_ = h2.shape
+                hflat = h2.reshape(-1, E_)                                   # [B*T, embd]
+                router = hflat @ w[f'{p}.ffn_gate_inp.weight']              # [B*T, n_experts]
+                probs = F.softmax(router.float(), dim=-1)
+                k = cfg.get('moe_top_k', 8)
+                topw, topi = torch.topk(probs, k, dim=-1)                    # [B*T, k]
+                topw = topw / topw.sum(dim=-1, keepdim=True)                 # renormalize selected gates
+                ge = w[f'{p}.ffn_gate_exps.weight']; ue = w[f'{p}.ffn_up_exps.weight']; de = w[f'{p}.ffn_down_exps.weight']
+                out = torch.zeros_like(hflat)
+                for tok in range(hflat.shape[0]):
+                    acc = torch.zeros(E_, dtype=hflat.dtype)
+                    hv = hflat[tok]
+                    for j in range(k):
+                        e = int(topi[tok, j]); g = float(topw[tok, j])
+                        gate_e = ge[:, :, e]; up_e = ue[:, :, e]; down_e = de[:, :, e]
+                        eh = F.silu(hv @ gate_e) * (hv @ up_e)               # [expert_ff]
+                        acc = acc + g * (eh @ down_e)                        # [embd]
+                    out[tok] = acc
+                ffn = out.reshape(B_, T_, E_)
+            elif is_gpt2:
                 h2 = F.layer_norm(x, [x.shape[-1]], w[f'{p}.ffn_norm.weight'], w[f'{p}.ffn_norm.bias'])
                 ffn_h = F.gelu(h2 @ w[f'{p}.ffn_up.weight'] + w[f'{p}.ffn_up.bias'])
                 ffn = ffn_h @ w[f'{p}.ffn_down.weight'] + w[f'{p}.ffn_down.bias']
@@ -1112,9 +1177,10 @@ def generate(path, input_ids, n_tokens=20, device="cpu"):
 
 
 
-def generate_logits(path, input_ids):
+def generate_logits(path, input_ids, preloaded=None):
     """Forced-decode primitive: ONE forward over input_ids -> final-position logit vector (numpy) +
-    argmax token. Reuses generate()'s tested forward via a logit-capture patch. For the xrt referee."""
+    argmax token. Reuses generate()'s tested forward via a logit-capture patch. For the xrt referee.
+    preloaded=(cfg, w) reuses an already-loaded model (essential for big models like the 30B)."""
     import torch as _t, numpy as _np
     cap = {}
     real = _t.Tensor.argmax
@@ -1125,7 +1191,7 @@ def generate_logits(path, input_ids):
         return real(self, *a, **k)
     _t.Tensor.argmax = _wrap
     try:
-        generate(path, list(input_ids), n_tokens=1)
+        generate(path, list(input_ids), n_tokens=1, preloaded=preloaded)
     finally:
         _t.Tensor.argmax = real
     lg = cap.get('l')
@@ -1137,7 +1203,7 @@ if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     flags = [a for a in sys.argv[1:] if a.startswith('--')]
     
-    p = args[0] if args else 'models/model.gguf'
+    p = args[0] if args else 'models/model.gguf_K.gguf'
     ids = [int(x) for x in args[1].split(',')] if len(args) > 1 else [1, 15043]
     
     if '--generate' in flags:

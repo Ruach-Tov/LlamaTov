@@ -1,0 +1,7 @@
+%% qwen3moe-30B (qwen3:30b) convergence validation — RTAAL-1.1
+%% arch=qwen3moe, 48 layers, embd 2048, head_dim 128, 128 experts / top-8, qk_norm=True
+%% deriver: 3840 ops, EXIT 0, detected moe=True + qk_norm=True + moe_top_k=8 + moe_n_experts=128
+%% role inference: kv=96 q=48 router=48 skip=96 (exact for 48L)
+%% residual_cache plan: 96 K/V projections, 48 residuals
+%% MoE + Qwen3 qk-norm + decoupled head_dim ALL COMPOSE, zero arch-specific code.
+%% This is almost certainly hermes-final's actual model (Qwen3 30B-A3B: 30B total / 3B active).
