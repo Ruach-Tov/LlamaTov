@@ -8,7 +8,8 @@ compares the SAME conditioning and divergence CANNOT cascade. For each generated
 OUR logits conditioned on (prompt + ollama_tokens[:i]) and compare OUR logprob for ollama_tokens[i] vs
 Ollama's logprob for that same token. Apples-to-apples, per-token, no trajectory drift."""
 import sys, os, json, urllib.request, math
-sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")"); sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")/lib"); sys.path.insert(0,"/tmp")
+import os as _pf
+sys.path.insert(0, _pf.environ.get("BPD_ROOT","bpd")); sys.path.insert(0, _pf.path.join(_pf.environ.get("BPD_ROOT","bpd"),"lib")); sys.path.insert(0,"/tmp")
 import torch, numpy as np, llamatov_run as R
 from qwen_bpe import QwenBPE
 URL="http://localhost:11434/api/generate"

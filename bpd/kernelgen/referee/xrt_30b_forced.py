@@ -4,7 +4,8 @@
 Our engine vs Ollama/llama.cpp, forced down Ollama's token sequence, per-token logprob delta.
 For the 30B this loads once and runs N forwards (each ~15min on CPU) — N small."""
 import sys, os, json, urllib.request, math, time
-sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")"); sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")/lib"); sys.path.insert(0,"/tmp")
+import os as _pf
+sys.path.insert(0, _pf.environ.get("BPD_ROOT","bpd")); sys.path.insert(0, _pf.path.join(_pf.environ.get("BPD_ROOT","bpd"),"lib")); sys.path.insert(0,"/tmp")
 import numpy as np, llamatov_run as R
 from qwen_bpe import QwenBPE
 URL="http://localhost:11434/api/generate"

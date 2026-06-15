@@ -6,7 +6,8 @@ per-head QK-norm), and compare BIT-FOR-BIT to the K/V the forward actually compu
 is identical, residual_cache is EXACT on Qwen3 (token-identical decode follows). Not a determinism stub —
 it runs the real recompute and compares."""
 import sys, os
-sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")"); sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")/lib"); sys.path.insert(0,"/tmp")
+import os as _pf
+sys.path.insert(0, _pf.environ.get("BPD_ROOT","bpd")); sys.path.insert(0, _pf.path.join(_pf.environ.get("BPD_ROOT","bpd"),"lib")); sys.path.insert(0,"/tmp")
 import torch, numpy as np, llamatov_run as R
 from qwen_bpe import QwenBPE
 B=os.environ["BLOB"]

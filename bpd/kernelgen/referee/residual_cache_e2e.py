@@ -12,7 +12,9 @@ direct projection, bit-for-bit -> the transform yields token-identical decode (t
 Runs on real weights, real kernels, all 24 layers' K/V projections, on real residual activations.
 """
 import sys, os, ctypes
-sys.path.insert(0, "os.path.join(os.path.dirname(__file__),"..","..")"); sys.path.insert(0, "os.path.join(os.path.dirname(__file__),"..","..")/lib")
+import os as _pf
+_root = _pf.path.join(_pf.path.dirname(__file__), "..", "..")
+sys.path.insert(0, _root); sys.path.insert(0, _pf.path.join(_root, "lib"))
 import numpy as np, dev_residency as dr, llamatov_run as R, fact_dispatch as fd
 cu = fd._libcuda(); fd._ctx()
 

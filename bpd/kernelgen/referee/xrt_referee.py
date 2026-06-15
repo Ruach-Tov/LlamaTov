@@ -10,7 +10,8 @@ SAME token, compare our log-softmax(token) to Ollama's logprob(token): that's th
 divergence between the two runtimes. Reports mean/max logprob delta + how often the argmax agrees and,
 when it differs, whether it's a thin-margin flip (drift > top1-top2 gap)."""
 import sys, os, json, urllib.request, math
-sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")"); sys.path.insert(0,"os.environ.get("BPD_ROOT","bpd")/lib"); sys.path.insert(0,"/tmp")
+import os as _pf
+sys.path.insert(0, _pf.environ.get("BPD_ROOT","bpd")); sys.path.insert(0, _pf.path.join(_pf.environ.get("BPD_ROOT","bpd"),"lib")); sys.path.insert(0,"/tmp")
 import torch, numpy as np, llamatov_run as R
 from qwen_bpe import QwenBPE
 URL="http://localhost:11434/api/generate"
