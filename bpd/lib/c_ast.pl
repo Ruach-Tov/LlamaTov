@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% c_ast.pl — Prolog C AST library for BPD code generators.
 %%
 %% Provides a term-level representation of C language constructs
@@ -262,10 +260,31 @@ emit_expr(c_call(Func, Args)) -->
 emit_expr(c_cast(Type, Expr)) -->
     "(", emit_type(Type), ")", emit_expr(Expr).
 
+%% Binop: parenthesize operands that are THEMSELVES compound expressions
+%% (binop/ternary/cast), so precedence is preserved. Without this,
+%% c_binop(/, c_binop(+, n, 255), 256) emitted "n + 255 / 256" (= n + 0)
+%% instead of "(n + 255) / 256". Simple operands (vars, ints, calls,
+%% already-parenthesized) pass through unwrapped — preserving the
+%% upstream minimal-paren convention.
 emit_expr(c_binop(Op, L, R)) -->
-    emit_expr(L), " ", emit_atom(Op), " ", emit_expr(R).
+    emit_binop_operand(L), " ", emit_atom(Op), " ", emit_binop_operand(R).
 emit_expr(c_unop(Op, E)) -->
-    emit_atom(Op), emit_expr(E).
+    emit_atom(Op), emit_binop_operand(E).
+
+%% emit_binop_operand: wrap compound operands in parens; pass simple ones through.
+emit_binop_operand(c_binop(Op, L, R)) -->
+    "(", emit_expr(c_binop(Op, L, R)), ")".
+emit_binop_operand(c_ternary(C, T, E)) -->
+    "(", emit_expr(c_ternary(C, T, E)), ")".
+emit_binop_operand(c_cast(Ty, E)) -->
+    "(", emit_expr(c_cast(Ty, E)), ")".
+emit_binop_operand(E) -->
+    { \+ compound_binop_operand(E) },
+    emit_expr(E).
+
+compound_binop_operand(c_binop(_, _, _)).
+compound_binop_operand(c_ternary(_, _, _)).
+compound_binop_operand(c_cast(_, _)).
 
 emit_expr(c_sizeof(E)) -->
     "sizeof(", emit_expr(E), ")".
