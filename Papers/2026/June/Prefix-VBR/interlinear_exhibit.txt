@@ -1,0 +1,27 @@
+PREFIX-VBR vs Q8_0 — free-running generation after each divergence prompt (gold = reference)
+(* marks a token differing from gold at that column; free-run, no teacher-forcing)
+
+[p72] VBR diverges (gentle) — prompt ends: ...' butter firms up before you roll'
+  gold | so  the  butter  firms  up  before  you  roll  it   ,      and 
+  q8   | so  the  butter  firms  up  before  you  roll  it   ,      and 
+  vbr  | so  the  butter  firms  up  before  you  roll  the* dough* ,*  
+
+[p59] Q8_0 diverges — prompt ends: ...'he sauce and a handful of grated'
+  gold | with  the  sauce  and  a  handful  of  grated  Parm    esan  cheese 
+  q8   | with  the  sauce  and  a  handful  of  grated  cheese* .*    The*   
+  vbr  | with  the  sauce  and  a  handful  of  grated  Parm    esan  cheese 
+
+[p66] Q8_0 diverges — prompt ends: ...'ssing halfway through, until the'
+  gold | pan  ,  tossing  halfway  through  ,  until  the  water  is  clean 
+  q8   | pan  ,  tossing  halfway  through  ,  until  the  pan*   is  clean 
+  vbr  | pan  ,  tossing  halfway  through  ,  until  the  water  is  clean 
+
+[p67] Q8_0 diverges — prompt ends: ...'w and let the risotto absorb the'
+  gold | low  and  let  the  ris  otto  absorb  the  broth       .  Then 
+  q8   | low  and  let  the  ris  otto  absorb  the  vegetables* .  Then 
+  vbr  | low  and  let  the  ris  otto  absorb  the  broth       .  Then 
+
+[p81] Q8_0 diverges — prompt ends: ...'a null pointer, and the standard'
+  gold | ference  a  null  pointer  ,  and  the  standard  way      to  handle 
+  q8   | ference  a  null  pointer  ,  and  the  standard  library* 's* string*
+  vbr  | ference  a  null  pointer  ,  and  the  standard  way      to  handle 
