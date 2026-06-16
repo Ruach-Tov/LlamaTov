@@ -3,22 +3,19 @@
 ## Quick Start
 
 ```bash
-# Run on the included 100-row sample:
+# Run on the included full dataset (25.2M FP16 values, 48 MB):
+swipl --stack_limit=16G reproduce_table1_granite.pl embeddings_granite_65580x384.f16
+
+# Or on the 100-row CSV sample for quick testing:
 swipl --stack_limit=2G reproduce_table1_granite.pl embeddings_sample_100.csv
-
-# Run on the full 65,580-row dataset (requires PostgreSQL with wordnet_embeddings_granite):
-psql -d claude_conversations -t -A -c \
-  "SELECT replace(replace(embedding::text,'[',''),']','') \
-   FROM wordnet_embeddings_granite" > embeddings_full.csv
-
-swipl --stack_limit=16G reproduce_table1_granite.pl embeddings_full.csv
 ```
 
 ## Files
 
-- `reproduce_table1_granite.pl` — SWI-Prolog program that reads embedding CSV, applies per-block normalization (block_size=32), and prints the Table 1 distribution histogram.
-- `embeddings_sample_100.csv` — 100 granite-embedding vectors (384 floats each, 38,400 values) for quick verification. The full dataset (65,580 rows, 25,182,720 values) is extracted from PostgreSQL as shown above.
-- `extract_embeddings.sh` — Helper script to extract the full dataset.
+- `reproduce_table1_granite.pl` — SWI-Prolog program that reads embedding data, applies per-block normalization (block_size=32), and prints the Table 1 distribution histogram. Accepts both FP16 binary (`.f16`) and CSV (`.csv`) input.
+- `embeddings_granite_65580x384.f16` — Full dataset: 65,580 granite-embedding vectors × 384 dimensions = 25,182,720 values stored as IEEE 754 half-precision (2 bytes each, little-endian). 48 MB.
+- `embeddings_sample_100.csv` — 100-row CSV sample (462 KB) for quick verification.
+- `extract_embeddings.sh` — Helper script to re-extract from PostgreSQL (if available).
 
 ## Expected Output (full dataset)
 
@@ -34,8 +31,12 @@ TABLE 1: Per-block normalized |w_norm|
   [96, 128)       6.7%      100.0%
 ```
 
+## Data Format
+
+The `.f16` file contains raw IEEE 754 half-precision floats in little-endian byte order. Each embedding is 384 consecutive FP16 values (768 bytes). The file contains 65,580 embeddings laid out sequentially with no headers or separators.
+
+To read in Python: `numpy.fromfile('embeddings_granite_65580x384.f16', dtype=numpy.float16).reshape(65580, 384)`
+
 ## Requirements
 
-- SWI-Prolog 9.x
-- PostgreSQL with `wordnet_embeddings_granite` table (for full dataset extraction)
-- The `granite-embedding` model embeddings were generated using IBM's granite-embedding (62 MB, 384 dimensions) via Ollama
+- SWI-Prolog 9.x with `--stack_limit=16G` for the full dataset
