@@ -78,17 +78,45 @@ main :-
 
 %% ================================================================
 %% Q8_0: scale = max(|block|)/127, quantize to int8, dequantize
+%% Matches ggml exactly: scale is truncated to FP16 for storage,
+%% and dequantization uses the FP16-truncated scale.
 %% ================================================================
 q8_0_roundtrip(Block, Recovered) :-
     maplist([W, A]>>(A is abs(W)), Block, AbsBlock),
     max_list(AbsBlock, MaxAbs),
     (MaxAbs =:= 0.0
     ->  Recovered = Block
-    ;   Scale is MaxAbs / 127.0,
-        maplist({Scale}/[W, R]>>(
-            Q is max(-127, min(127, round(W / Scale))),
-            R is Q * Scale
+    ;   ScaleF64 is MaxAbs / 127.0,
+        fp16_roundtrip(ScaleF64, ScaleF16),
+        InvScale is 1.0 / ScaleF64,         % quantize with FP32-precision inverse
+        maplist({InvScale, ScaleF16}/[W, R]>>(
+            Q is max(-127, min(127, round(W * InvScale))),
+            R is Q * ScaleF16                % dequantize with FP16-truncated scale
         ), Block, Recovered)
+    ).
+
+%% fp16_roundtrip(+Float64, -Float64RoundedToFP16)
+%% Simulates IEEE 754 half-precision: 1 sign + 5 exponent + 10 mantissa.
+%% Rounds the mantissa to 10 bits (round-to-nearest-even).
+fp16_roundtrip(0.0, 0.0) :- !.
+fp16_roundtrip(X, Result) :-
+    Abs is abs(X),
+    Sign is sign(X),
+    %% Find the exponent
+    Exp is floor(log(Abs) / log(2)),
+    %% FP16 exponent range: -14 to 15 (biased: 1-30, 0=subnormal, 31=inf)
+    (Exp < -14
+    ->  %% Subnormal: mantissa = Abs / 2^(-14), quantize to 10 bits
+        Mantissa is Abs / (2 ** (-14)),
+        RoundedMantissa is round(Mantissa * 1024) / 1024,
+        Result is Sign * RoundedMantissa * (2 ** (-14))
+    ;   Exp > 15
+    ->  Result is Sign * (1.0/0.0)   % infinity
+    ;   %% Normal: mantissa in [1, 2), quantize fractional part to 10 bits
+        Mantissa is Abs / (2 ** Exp),   % in [1.0, 2.0)
+        Frac is Mantissa - 1.0,         % in [0.0, 1.0)
+        RoundedFrac is round(Frac * 1024) / 1024,
+        Result is Sign * (1.0 + RoundedFrac) * (2 ** Exp)
     ).
 
 %% ================================================================
