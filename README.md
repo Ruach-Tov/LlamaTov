@@ -68,7 +68,10 @@ LLVM, GGML, or PyTorch — all verified to agree.
 ## Quick start
 
 ```bash
-# Prerequisites: SWI-Prolog, Python 3.12+, PyTorch, an NVIDIA CUDA toolkit (sm_61+), a Q8_0 GGUF model.
+# Prerequisites: SWI-Prolog, Python 3.12+, PyTorch, an NVIDIA CUDA toolkit (sm_61+), gcc/build-essential, a Q8_0 GGUF model.
+# On Ubuntu/Debian:
+# sudo apt-get install software-properties-common build-essential
+# sudo apt-add-repository ppa:swi-prolog/stable && sudo apt-get update && sudo apt-get install swi-prolog
 git clone https://github.com/Ruach-Tov/LlamaTov.git
 cd LlamaTov
 

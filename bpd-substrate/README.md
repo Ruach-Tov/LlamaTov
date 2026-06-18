@@ -6,6 +6,9 @@
 
 ```bash
 # Prerequisites: gcc, Python 3.12+, PyTorch, SWI-Prolog
+# On Ubuntu/Debian:
+# sudo apt-get install software-properties-common build-essential
+# sudo apt-add-repository ppa:swi-prolog/stable && sudo apt-get update && sudo apt-get install swi-prolog
 git clone https://github.com/heath-hunnicutt-ruach-tov/bpd-substrate.git
 cd bpd-substrate
 
