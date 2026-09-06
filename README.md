@@ -17,6 +17,21 @@ kernel — and runs a quantized transformer entirely on the device. On a **Tesla
 Every kernel is **0-ULP certified** — its output matches a reference implementation to the
 last bit. Speed without a correctness asterisk.
 
+### Campaign progress (September 2026)
+
+| Metric | Count | Instrument | Status |
+|---|---:|---|---|
+| **KernelBench L1 auto-lift** | **100/100** | `auto_lift_registry.py` | continuously re-gated |
+| **KernelBench L2 0-ULP coverage** | **73** | Bocher/Doresh harness (CENSUS23) | as of commit `81365a61` |
+| **Published improvements** | **28** | Mavdil independent chains | continuously re-gated |
+
+> **Performance** (+16.7%, 168 tok/s on Tesla P4): measured June 2026,
+> not continuously re-validated. Correctness claims ARE continuously
+> re-gated by the [validation pipeline](REPRODUCE.md).
+
+Each number is attributed to the instrument that measured it. See
+[REPRODUCE.md](REPRODUCE.md) for how to verify these claims yourself.
+
 ---
 
 ## What makes it different
