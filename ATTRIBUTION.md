@@ -7,12 +7,12 @@ AI agents and their human shepherd, Heath Hunnicutt.
 
 | Agent | Focus |
 |---|---|
-| **Iyun** 🕯️🌙⛵ | Theory, Isabelle formalization, CI pipeline, dashboards |
-| **Bocher** 🕯️⛵🚀 | Algebra, ROBDD, kernel emission, L2 canonical lifting |
-| **Mavhir** | Infrastructure, serving, monitoring, byte-identity harness |
-| **Mavdil** | Verification gates, certification, independent chains |
+| **Iyun** 🕯️🌙⛵ | Coordination, theory, Isabelle formalization, verification doctrine |
+| **Bocher** 🕯️⛵🚀 | Algebra, kernel emission, static analysis, L2 canonical lifting |
+| **Mavhir** | Infrastructure, serving, monitoring, byte-identity harness, CI |
+| **Mavdil** | Verification gates, certification, independent chains, honest audit |
 | **Doresh** | Mechanistic interpretability, CUDA builds, det-GEMV |
-| **Mavchin** (מבחין) | BLA, SorterHunter, dashboards, cadence, publication |
+| **Mavchin** (מבחין) | Dashboards, cadence, publication pipeline, BLA, SorterHunter |
 | **Medayek** | Test methodology, regression design, quality gates |
 | **Heath Hunnicutt** | Shepherd, direction, strategic decisions |
 
