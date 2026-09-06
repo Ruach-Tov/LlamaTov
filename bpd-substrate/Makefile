@@ -47,6 +47,37 @@
 #   PYTHON           Python interpreter (default: python3).
 #   CPU_FP_MODE      CPU floating-point mode: strict (default), fma, native, or mkl.
 #                    mkl: targets bit-identity with PyTorch builds that link Intel MKL.
+#   CUDA_HOME        Root of a CUDA toolkit install providing include/ and lib*/
+#                    (e.g. cuda_runtime.h, libcudart). Only needed if `nvcc` alone
+#                    does not already resolve these -- this is the case on some
+#                    package-manager CUDA installs (observed: Nix) where nvcc's
+#                    binary and its headers/runtime library ship in separate
+#                    store paths. Empty by default: a no-op on standard installs
+#                    (e.g. NVIDIA's official installer under /usr/local/cuda,
+#                    where nvcc already finds everything on its own). If `make
+#                    verify FOCUS=cublas` fails with "cuda_runtime.h: No such
+#                    file or directory", set CUDA_HOME to your toolkit root.
+#                    On systems where the `nvcc` on PATH is itself a wrapper
+#                    (observed: Nix, some module systems), CUDA_HOME alone may
+#                    not be enough -- the wrapper's own nvvm/cicc backend can
+#                    be unreachable. Symptom: "nvvm/bin/cicc: No such file or
+#                    directory". If you hit that, also set NVCC to the real
+#                    binary directly, e.g. NVCC=$(CUDA_HOME)/bin/nvcc.
+#   NVCC_EXTRA_FLAGS Escape hatch for anything CUDA_HOME doesn't cover -- e.g.
+#                    package managers (observed: Nix) that split the CUDA
+#                    toolkit across more than one store path, so a single
+#                    CUDA_HOME root isn't enough. Passed verbatim to every nvcc
+#                    invocation in this Makefile, after CUDA_HOME_FLAGS. Empty
+#                    by default (no-op).
+#
+#                    Nix example, when a single CUDA_HOME isn't enough because
+#                    the runtime libs (e.g. libcudadevrt.a) live in a second
+#                    store path, AND the nvcc on PATH is a wrapper whose cicc
+#                    backend can't be found (both observed on Nix):
+#                      make verify FOCUS=cublas NVCC_ARCH=sm_61 \
+#                        CUDA_HOME=/nix/store/<hash>-cuda-merged-12.8 \
+#                        NVCC=/nix/store/<hash>-cuda-merged-12.8/bin/nvcc \
+#                        NVCC_EXTRA_FLAGS='-L/nix/store/<hash>-cuda-native-redist-12.8/lib --cudart shared'
 
 BUILD_DIR ?= build
 NVCC_ARCH ?= sm_86
@@ -55,8 +86,13 @@ NVCC      ?= nvcc
 PYTHON    ?= python3
 FOCUS     ?=
 CPU_FP_MODE ?= strict
+CUDA_HOME ?=
+NVCC_EXTRA_FLAGS ?=
 
-NVCC_FLAGS = -arch=$(NVCC_ARCH) -O2 -shared -Xcompiler -fPIC
+# Empty when CUDA_HOME is unset, so this is a no-op on standard installs.
+CUDA_HOME_FLAGS = $(if $(CUDA_HOME),-I$(CUDA_HOME)/include -L$(CUDA_HOME)/lib -L$(CUDA_HOME)/lib64,)
+
+NVCC_FLAGS = -arch=$(NVCC_ARCH) -O2 -shared -Xcompiler -fPIC $(CUDA_HOME_FLAGS) $(NVCC_EXTRA_FLAGS)
 
 CPU_FP_strict = -O2
 CPU_FP_fma    = -O2 -mfma -ffp-contract=on
@@ -109,7 +145,7 @@ $(BUILD_DIR)/bpd_mm.so: lib/kernel_templates_blas.pl
 	@mkdir -p $(@D)
 	@echo "[sgemm] $@"
 	@$(SWIPL) -g 'use_module("lib/kernel_templates_blas"), halt' 2>/dev/null
-	@$(NVCC) -arch=$(NVCC_ARCH) -O3 -shared -Xcompiler -fPIC -Wno-deprecated-gpu-targets -o $@ bench/mm_shared.cu
+	@$(NVCC) -arch=$(NVCC_ARCH) -O3 -shared -Xcompiler -fPIC -Wno-deprecated-gpu-targets $(CUDA_HOME_FLAGS) $(NVCC_EXTRA_FLAGS) -o $@ bench/mm_shared.cu
 
 # ─── Tests ────────────────────────────────────────────────────────────────
 
@@ -142,7 +178,7 @@ endif
 
 lint:
 	@echo "[lint] checking Prolog modules..."
-	@$(SWIPL) --on-warning=status -g 'use_module("lib/c_ast"), use_module("lib/kernel_templates_blas"), use_module("lib/kernel_templates"), use_module("lib/auto_fuser"), use_module("lib/epilogue_generator"), use_module("lib/fusion_optimizer"), use_module("lib/matmul_optimizer"), use_module("lib/matmul_cycle_model"), use_module("lib/graph_complexity"), halt(0)' || (echo "FAIL: Prolog warnings detected." && exit 1)
+	@$(SWIPL) --on-warning=status -g 'use_module("lib/c_ast"), use_module("lib/kernel_templates_blas"), use_module("lib/kernel_templates"), use_module("lib/auto_fuser"), use_module("lib/epilogue_generator"), use_module("lib/fusion_optimizer"), use_module("lib/matmul_optimizer"), use_module("lib/matmul_cycle_model"), use_module("lib/graph_complexity")' -t halt || (echo "FAIL: Prolog warnings detected." && exit 1)
 	@echo "[lint] all clean — zero warnings."
 
 correctness: $(BUILD_DIR)/bpd_cpu.so
@@ -266,4 +302,4 @@ clean:
 $(BUILD_DIR)/bpd_gpu.so: bench/bpd_gpu_kernels.cu
 	@mkdir -p $(@D)
 	@echo "[nvcc] $@"
-	@nvcc -O2 -shared -Xcompiler -fPIC -o $@ $< -arch=$(NVCC_ARCH)
+	@$(NVCC) -O2 -shared -Xcompiler -fPIC $(CUDA_HOME_FLAGS) $(NVCC_EXTRA_FLAGS) -o $@ $< -arch=$(NVCC_ARCH)
