@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """
 Per-op gate for the 9 tiled Q8_0 kernels.
 

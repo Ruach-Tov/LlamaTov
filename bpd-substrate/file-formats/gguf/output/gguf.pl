@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 % BPD Prolog IR — generated from file-formats/gguf/gguf.bpd
 % 46 clauses, 0 directives
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """bench_L0_spec.py \u2014 Phase 3.CAT.SPEC.a empirical experiment.
 
 Measures whether GCC's const-propagation on compile-time-fixed M, N, K

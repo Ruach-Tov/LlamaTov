@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% ondnn_jit_facts.pl — The oneDNN gelu_erf JIT kernel as Prolog facts.
 %%
 %% Each fact represents one x86 instruction from the disassembly.

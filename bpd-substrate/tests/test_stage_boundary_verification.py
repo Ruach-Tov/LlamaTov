@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Stage-Boundary Verification — Rule 3 worked example.
 
 RULE 3: "Test at stage boundaries, not just endpoints.

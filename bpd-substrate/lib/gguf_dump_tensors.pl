@@ -1,6 +1,4 @@
 #!/usr/bin/env swipl
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 % gguf_dump_tensors.pl — Dump the tensor_info section of a GGUF file.
 %
 % V.D.G1 step 7: empirical verification that the new interior-repeated
@@ -25,7 +23,7 @@
 :- consult('ir/include/prolog_reader_generator.pl').
 
 default_gguf_file(
-    '${OLLAMA_BLOBS:-~/.ollama/models/blobs}/\c
+    '/home/heath/.ollama/models/blobs/\c
 sha256-970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6').
 
 read_file_partial(Path, MaxBytes, Str) :-

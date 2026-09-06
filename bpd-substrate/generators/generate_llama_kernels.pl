@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% generate_llama_kernels.pl — Thin orchestrator for llama-family CUDA generation.
 %%
 %% ZERO write/1. Every line from AST terms through emit_program/2.

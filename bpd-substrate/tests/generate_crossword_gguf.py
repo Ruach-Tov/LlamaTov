@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Generate a crossword-puzzle GGUF file with intentional overlap attacks.
 
 Creates a minimal valid-looking GGUF file where:

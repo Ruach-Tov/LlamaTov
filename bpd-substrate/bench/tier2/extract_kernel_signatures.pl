@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% extract_kernel_signatures.pl — Tier 2 subtask 2b.
 %%
 %% For each validation case in test_kernelbench_l1_cuda.pl, call the kernel

@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """test_llama_kernels.py — 0-ULP gates for our kernels against llama.cpp's flow.
 
 Each test loads a triplet (input_a, input_b, expected_out) from the captured
@@ -116,7 +114,7 @@ def test_lk_01_embed_lookup(lib, tensors):
 
     gguf_path = os.environ.get(
         "LLAMA_GGUF",
-        ""
+        "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
     )
     if not os.path.exists(gguf_path):
         return TestStatus.SKIP, f"GGUF not at {gguf_path}"
@@ -191,7 +189,7 @@ def test_lk_10_q8_0_matmul(lib, tensors):
 
     gguf_path = os.environ.get(
         "LLAMA_GGUF",
-        ""
+        "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
     )
     if not os.path.exists(gguf_path):
         return TestStatus.SKIP, f"GGUF not at {gguf_path}"
@@ -246,7 +244,7 @@ def test_lk_10_q8_0_matmul_experiment(lib, tensors):
 
     gguf_path = os.environ.get(
         "LLAMA_GGUF",
-        ""
+        "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
     )
     if not os.path.exists(gguf_path):
         return TestStatus.SKIP, f"GGUF not at {gguf_path}"
@@ -335,7 +333,7 @@ def test_lk_09_q8_0_dequant(lib, tensors):
 
     gguf_path = os.environ.get(
         "LLAMA_GGUF",
-        ""
+        "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
     )
     if not os.path.exists(gguf_path):
         return TestStatus.SKIP, f"GGUF not at {gguf_path}"

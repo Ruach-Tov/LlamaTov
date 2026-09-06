@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% tensor_schema.pl — SHARED fact-schema declarations for the tensor-op type system.
 %%
 %% This module is the single source of truth for the SHAPE of the fact base. Both the
@@ -81,32 +79,27 @@ describe(projection(X, W), Desc) :-
 describe(rope(X), Desc) :-
     format(atom(Desc), 'RoPE on ~w', [X]).
 describe(reshape(T), Desc) :-
-    format(atom(Desc), 'Reshape ~w', [T]).
+    format(atom(Desc), 'reshape ~w', [T]).
 describe(view(T), Desc) :-
-    format(atom(Desc), 'View into ~w', [T]).
+    format(atom(Desc), 'view ~w', [T]).
 describe(transpose(T), Desc) :-
-    format(atom(Desc), 'Transpose ~w', [T]).
+    format(atom(Desc), 'transpose ~w', [T]).
 describe(permute(T), Desc) :-
-    format(atom(Desc), 'Permute ~w', [T]).
+    format(atom(Desc), 'permute ~w', [T]).
 describe(cont(T), Desc) :-
-    format(atom(Desc), 'Contiguous ~w', [T]).
+    format(atom(Desc), 'contiguous ~w', [T]).
 describe(cast(From, To, Dst), Desc) :-
-    format(atom(Desc), '~w \u2192 ~w cast into ~w', [From, To, Dst]).
+    format(atom(Desc), '~w \u2192 ~w (~w)', [From, To, Dst]).
 describe(copy(Src, Dst), Desc) :-
-    format(atom(Desc), 'Copy ~w \u2192 ~w', [Src, Dst]).
+    format(atom(Desc), 'copy ~w \u2192 ~w', [Src, Dst]).
 describe(matmul(T), Desc) :-
-    format(atom(Desc), 'Matmul \u2192 ~w', [T]).
+    format(atom(Desc), 'matmul \u2192 ~w', [T]).
 describe(softmax(T), Desc) :-
-    format(atom(Desc), 'Softmax(~w)', [T]).
+    format(atom(Desc), 'softmax(~w)', [T]).
 describe(elementwise(Op, T), Desc) :-
-    cap_atom(Op, OpC),
-    format(atom(Desc), '~w \u2192 ~w', [OpC, T]).
-
-%% cap_atom: capitalize the first letter of an atom (sentence-case prose helper)
-cap_atom(A, C) :- sub_atom(A, 0, 1, _, F), upcase_atom(F, FU),
-                  sub_atom(A, 1, _, 0, Rest), atom_concat(FU, Rest, C).
+    format(atom(Desc), '~w \u2192 ~w', [Op, T]).
 describe(leaf(T), Desc) :-
-    format(atom(Desc), 'Leaf ~w', [T]).
+    format(atom(Desc), 'leaf ~w', [T]).
 %% off-page connectors (drill-down filmstrip) — derived from layer_coords adjacency
 describe(continues(Next), Desc) :-
     format(atom(Desc), 'CONTINUES (~w) \u25b6', [Next]).

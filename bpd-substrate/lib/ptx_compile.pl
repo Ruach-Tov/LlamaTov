@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% ptx_compile.pl — Compile LLVM IR to PTX for GPU execution from Prolog
 %%
 %% The missing link: Prolog emits .ll → this compiles to .ptx → cuda_launch loads it.

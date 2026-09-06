@@ -1,6 +1,4 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 # build_eval_callback.sh — build a patched llama.cpp eval-callback that dumps
 # binary tensors when LLAMA_DUMP_DIR is set.
 #

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 /* bpd_llvm_norm.c — Prolog→LLVM IR for two-pass reduction+elementwise ops.
  *
  * Pattern: pass 1 reduces (mean, variance), pass 2 normalizes elementwise.

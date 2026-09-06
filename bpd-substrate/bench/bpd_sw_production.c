@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 /* bpd_smith_waterman_banded.c — Banded Smith-Waterman (CPU + GPU-ready)
  *
  * Restricts the DP computation to a diagonal band of width 2*bandwidth+1

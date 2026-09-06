@@ -1,12 +1,10 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Verify our f16_to_f32 matches numpy's exactly for all F16 scales in attn_q.weight."""
 import sys, os, ctypes
 sys.path.insert(0, "/tmp/bpd_test/bench")
 import numpy as np
 from gguf_helper import query_tensor, read_tensor_bytes
 
-gguf = "/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
+gguf = "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
 info = query_tensor(gguf, "blk.0.attn_q.weight")
 raw = read_tensor_bytes(gguf, info)
 print(f"Got {len(raw)} bytes, {len(raw)//34} Q8_0 blocks")

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 /* bpd_sw_gpu_batch.cu — Batched GPU SW with CORRECT double-buffered shared memory
  *
  * FIX: Double buffering for H_col, E, F arrays.

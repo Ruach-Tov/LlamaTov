@@ -1,6 +1,4 @@
 #!/usr/bin/env swipl
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 % gguf_dump_metadata.pl — Iterate ALL metadata K-V pairs in a real GGUF
 % file. Closes V.C end-to-end: previously demonstrated isolated array
 % parsing; this proves the substrate handles a full real-world metadata
@@ -22,7 +20,7 @@
 :- consult('ir/include/prolog_reader_generator.pl').
 
 default_gguf_file(
-    '${OLLAMA_BLOBS:-~/.ollama/models/blobs}/\c
+    '/home/heath/.ollama/models/blobs/\c
 sha256-970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6').
 
 % Read only first MaxBytes — sufficient for typical metadata sections.

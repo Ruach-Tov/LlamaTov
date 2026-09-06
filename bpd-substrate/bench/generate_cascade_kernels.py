@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """generate_cascade_kernels.py — Emit C for every valid cascade-reduction pattern.
 
 Per Heath's direction 2026-05-20 ~20:00 UTC: "make porting the full

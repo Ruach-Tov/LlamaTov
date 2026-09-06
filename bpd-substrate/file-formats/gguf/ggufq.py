@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """ggufq.py — jq-style query tool for GGUF files.
 
 Stage 0: header-only queries.

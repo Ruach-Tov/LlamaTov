@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% gguf_query.pl \u2014 query a tensor's offset/size from a GGUF file.
 %%
 %% Usage: swipl -q -g "consult('tests/gguf_query.pl'), gguf_query_main" -- <gguf_path> <tensor_name>

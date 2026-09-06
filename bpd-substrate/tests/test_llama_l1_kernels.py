@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """test_llama_l1_kernels.py — Synthetic 0 ULP tests for Phase L.1 kernels.
 
 Each test uses a Python reference that mirrors the exact C/ggml arithmetic

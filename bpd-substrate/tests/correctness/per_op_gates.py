@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """per_op_gates.py — verify each captured ggml operation against our substrate.
 
 For each operation in the captured llama-eval-callback trace:

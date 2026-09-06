@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """gguf_helper.py — thin Python helper that calls the canonical Prolog GGUF
 reader (lib/gguf_native_reader.pl) via subprocess to fetch tensor info.
 
@@ -90,7 +88,7 @@ def read_tensor_bytes(gguf_path, info):
 if __name__ == "__main__":
     import sys
     gguf = sys.argv[1] if len(sys.argv) > 1 else \
-        "/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
+        "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
     name = sys.argv[2] if len(sys.argv) > 2 else "blk.0.attn_k.weight"
     info = query_tensor(gguf, name)
     print(f"name={info.name}")

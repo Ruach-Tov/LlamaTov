@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Sweep GPU Q4_K dequant parameters, verify 0 ULP at each setting."""
 import ctypes, numpy as np, struct, time, sys
 
@@ -22,7 +20,7 @@ gpu.sgpu_d2h.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
 gpu.sgpu_sync.argtypes = []
 
 # Load real data
-path = "${OLLAMA_BLOBS:-~/.ollama/models/blobs}/sha256-f5074b1221da0f5a2910d33b642efa5b9eb58cfdddca1c79e16d7ad28aa2b31f"
+path = "/home/heath/.ollama/models/blobs/sha256-f5074b1221da0f5a2910d33b642efa5b9eb58cfdddca1c79e16d7ad28aa2b31f"
 with open(path, "rb") as f:
     f.read(4); f.read(4)
     n_tensors = struct.unpack("<Q", f.read(8))[0]

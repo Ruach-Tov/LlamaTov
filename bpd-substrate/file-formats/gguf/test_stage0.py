@@ -1,6 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
-import os as _os2
 """test_stage0.py — tests for Stage 0 GGUF header parser and ggufq tool.
 
 Verifies:
@@ -71,28 +68,13 @@ def _find_gguf_by_version(blobs_dir: Path, version: int) -> Path | None:
     return None
 
 
-# The SHIPPING artifact: a real v3 GGUF that always sits on disk. Point conformance at it so the v3
-# tests RUN against what we actually ship, instead of skipping when Ollama blobs are absent.
-PRODUCTION_GGUF = Path(_os2.environ.get("LLAMATOV_MODEL", "models/qwen_q8.gguf"))
-
-
-def _ollama_blobs_dir_optional() -> Path | None:
-    p = Path.home() / ".ollama" / "models" / "blobs"
-    return p if p.exists() else None
-
-
 @pytest.fixture(scope="module")
-def gguf_v3_file() -> Path:
-    """A real v3 GGUF file. Prefer Ollama's blob store; else fall back to the PRODUCTION model (the
-    shipping artifact). Only skips if neither is available."""
-    blobs = _ollama_blobs_dir_optional()
-    if blobs is not None:
-        p = _find_gguf_by_version(blobs, version=3)
-        if p is not None:
-            return p
-    if PRODUCTION_GGUF.exists():
-        return PRODUCTION_GGUF
-    pytest.skip("no v3 GGUF: neither Ollama blobs nor the production model present")
+def gguf_v3_file(ollama_blobs_dir: Path) -> Path:
+    """A real v3 GGUF file from Ollama's blob store."""
+    p = _find_gguf_by_version(ollama_blobs_dir, version=3)
+    if p is None:
+        pytest.skip("no v3 GGUF file in Ollama blobs")
+    return p
 
 
 @pytest.fixture(scope="module")
@@ -291,17 +273,10 @@ class TestConformance:
 
     @pytest.fixture(scope="class")
     def reference_parser(self):
-        """Import mavchin's hand-written parser as the conformance reference. Resolved relative to the
-        repo root (not a hardcoded <home> path), and skips gracefully if absent OR unreadable
-        (PermissionError on a multi-user enclave) — a missing reference is a skip, not an error."""
-        repo_root = Path(__file__).resolve().parents[3]
-        ref_path = repo_root / "papers" / "kan-acceleration"
-        try:
-            present = (ref_path / "gguf_parser.py").exists()
-        except (PermissionError, OSError):
-            present = False
-        if not present:
-            pytest.skip("reference parser not found/readable at " + str(ref_path))
+        """Import mavchin's hand-written parser as the conformance reference."""
+        ref_path = Path("/home/heath/Ruach-Tov/papers/kan-acceleration")
+        if not (ref_path / "gguf_parser.py").exists():
+            pytest.skip("reference parser not found at " + str(ref_path))
         sys.path.insert(0, str(ref_path))
         try:
             import gguf_parser  # noqa

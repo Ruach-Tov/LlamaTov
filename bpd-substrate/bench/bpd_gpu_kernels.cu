@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 /* bpd_gpu_kernels.cu — GPU kernel implementations with host-callable wrappers.
  *
  * Each kernel has:

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """end_to_end_gate.py — full-forward inference comparison vs ggml.
 
 Runs our substrate's full forward pass on the same prompt as the captured

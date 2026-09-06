@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """check_qdot.py — debug L.1.10 by isolating just one (m, n) dot product."""
 import sys, os, ctypes
 sys.path.insert(0, "/tmp/bpd_test/bench")
@@ -22,7 +20,7 @@ ref_full = np.ascontiguousarray(qcur.as_numpy(), dtype=np.float32)
 print(f"X shape: {X.shape}, ref shape: {ref_full.shape}")
 print(f"ref[0, 0] = {ref_full[0, 0]} (the value we want to reproduce)")
 
-gguf = "/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
+gguf = "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
 info = query_tensor(gguf, "blk.0.attn_q.weight")
 W_raw = read_tensor_bytes(gguf, info)
 bytes_per_row = (info.dims[0] // 32) * 34

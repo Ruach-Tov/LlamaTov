@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """YOLO with ALL fusions + buffer reuse (eliminates Add+Add intermediates)."""
 import sys, os; sys.path.insert(0, "/tmp/yolov5")
 import torch, numpy as np, ctypes, time

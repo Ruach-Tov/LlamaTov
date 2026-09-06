@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_fused_mish_epilogue.py — TDD test for fused-mish-epilogue bit-identity.
 
 Per Heath's substantive direction 2026-05-20 ~03:55 UTC:

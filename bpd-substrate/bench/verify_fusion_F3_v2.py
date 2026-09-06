@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_fusion_F3_v2.py — verify bpd_conv2d_bn_silu_fused_cpu_v2 BIT_IDENTICAL.
 
 Substrate-design substantive substantive Tier 1.5 gate for the

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """probe_mkl_params.py — Empirically characterise what PyTorch MKL does for each
 divergent kernel family so we can derive the correct platform_param facts for
 the pytorch_cpu_mkl platform entry in implementation_matches.pl.

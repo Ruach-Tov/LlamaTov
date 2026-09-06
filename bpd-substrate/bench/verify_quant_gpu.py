@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Verify Q4_K GPU dequant + measure tokens/sec vs CPU baseline.
 
 Compares:
@@ -46,7 +44,7 @@ def main():
     # Load real Q4_K data from Mistral if available
     mistral_path = None
     for p in [
-        "${OLLAMA_BLOBS:-~/.ollama/models/blobs}/sha256-f5074b1221da0f5a2910d33b642efa5b9eb58cfdddca1c79e16d7ad28aa2b31f",
+        "/home/heath/.ollama/models/blobs/sha256-f5074b1221da0f5a2910d33b642efa5b9eb58cfdddca1c79e16d7ad28aa2b31f",
     ]:
         if os.path.exists(p):
             mistral_path = p

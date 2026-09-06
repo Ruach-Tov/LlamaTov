@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """test_embed_entry_point.py — Verify embedding dequant against fixture.
 
 This is the test that was MISSING from per_op_gates: it calls
@@ -139,7 +137,7 @@ main :-
 
 if __name__ == "__main__":
     so = sys.argv[1] if len(sys.argv) > 1 else "build/bpd_cpu.so"
-    gguf = sys.argv[2] if len(sys.argv) > 2 else "/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
+    gguf = sys.argv[2] if len(sys.argv) > 2 else "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
     fixtures = sys.argv[3] if len(sys.argv) > 3 else "/tmp/llama_dump_hello_8_v2"
 
     passed = test_embed_entry_point(so, gguf, fixtures)

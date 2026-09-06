@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """per_layer_gates.py — verify each transformer layer's output against ggml's.
 
 For each of the N transformer layers, drive bpd_llama_block_cpu (the C

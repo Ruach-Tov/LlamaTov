@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """
 llamatov_gpu_llama.py — Llama3.2:1b GPU inference on P4 (sm_61).
 Direct comparison to Ollama's 93.6 tok/s.

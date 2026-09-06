@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_yolo_composition_sweep.py — Greedy composition sweep for YOLOv5n.
 
 Per Heath 2026-05-21 ~02:45 UTC: 'we can try combinations of composing the

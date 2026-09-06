@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% c_ast.pl — Prolog C AST library for BPD code generators.
 %%
 %% Provides a term-level representation of C language constructs

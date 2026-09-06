@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% kernel_patterns.pl — Categorize L1 ops into LLVM IR emission patterns.
 %%
 %% Each op maps to a pattern. Each pattern has one LLVM IR emitter.

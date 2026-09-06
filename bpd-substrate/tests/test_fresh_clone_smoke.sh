@@ -1,6 +1,4 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 ## test_fresh_clone_smoke.sh — Fresh-clone smoke tests
 ##
 ## RULE 2: "If a user runs it, smoke-test it. Assert non-trivial output."

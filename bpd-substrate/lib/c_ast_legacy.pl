@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% c_ast_legacy.pl — Deprecated v1 parsing entry points from c_ast.pl
 %%
 %% These predicates were identified as dead (zero external callers) by

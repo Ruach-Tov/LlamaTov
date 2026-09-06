@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """generate_fixtures.py — produce a substantively-substantive fixture suite for L.1 closure verification.
 
 Generates op-by-op binary tensor dumps for each prompt in the test suite
@@ -31,7 +29,7 @@ import time
 from pathlib import Path
 
 # Default GGUF on the enclave
-DEFAULT_GGUF = "/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
+DEFAULT_GGUF = "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
 DEFAULT_BINARY = "/tmp/llama_cpp_test/build/bin/llama-eval-callback"
 DEFAULT_OUTPUT_BASE = "/tmp/llama_fixtures"
 

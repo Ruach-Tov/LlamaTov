@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_kernelbench_l1_cpu.py — Bit-identity sweep across all Stanford KernelBench L1 problems.
 
 Compares BPD CPU substrate output against PyTorch CPU for each of the 100 L1

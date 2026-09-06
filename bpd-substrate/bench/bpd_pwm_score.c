@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 /* bpd_pwm_score.c — Position Weight Matrix scoring (CPU reference)
  *
  * Scores all positions in a sequence against a PWM motif model.

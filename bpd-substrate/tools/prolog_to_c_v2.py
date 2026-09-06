@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """prolog_to_c_v2.py — Generate C from Prolog graph + routing table.
 
 Uses the layer-level routing (route/2 facts) from YOLOv5's forward pass

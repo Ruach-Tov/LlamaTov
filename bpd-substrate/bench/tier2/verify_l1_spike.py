@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_l1_spike.py — Phase 1 spike: 5 KernelBench L1 problems verified end-to-end.
 
 Per Heath's "(ii) Do the 2-hour spike tonight" direction 2026-05-20 ~01:55 UTC.

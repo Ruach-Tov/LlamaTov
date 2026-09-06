@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 % gguf_parse_driver.pl — drive Prolog GGUF parsing against a real file.
 %
 % Usage:
@@ -41,7 +39,7 @@
 % Override by passing a path argument to main/1.
 
 default_gguf_file(
-    '${OLLAMA_BLOBS:-~/.ollama/models/blobs}/\c
+    '/home/heath/.ollama/models/blobs/\c
 sha256-0577f52a4edfd5e48bb59c296bb4f40328161ecc3d0aa4398b3cb6b2b7367cac').
 
 

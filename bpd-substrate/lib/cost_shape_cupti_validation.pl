@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% cost_shape_cupti_validation.pl — Wire cost-shape PREDICTION to CUPTI MEASUREMENT
 %%
 %% The validation loop:

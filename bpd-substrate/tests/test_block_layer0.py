@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """test_block_layer0.py — Run bpd_llama_block_cpu on layer 0 with fixture inputs.
 
 Feeds the FIXTURE embedding to our block function and compares
@@ -28,7 +26,7 @@ c_int32_p = ctypes.POINTER(ctypes.c_int)
 
 def main():
     so_path = sys.argv[1] if len(sys.argv) > 1 else "build/bpd_cpu.so"
-    gguf_path = sys.argv[2] if len(sys.argv) > 2 else "/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
+    gguf_path = sys.argv[2] if len(sys.argv) > 2 else "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
     fixture_dir = sys.argv[3] if len(sys.argv) > 3 else "/tmp/llama_dump_hello_8_v2"
 
     lib = ctypes.CDLL(so_path)

@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Verify the BPD-generated SGEMV against PyTorch (which routes to cuBLAS on GPU).
 
 The repo's headline claim is "0 ULP vs cuBLAS" for SGEMV on sm_61 (Pascal).

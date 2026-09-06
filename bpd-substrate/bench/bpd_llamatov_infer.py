@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 import tempfile
 """bpd_llamatov_infer.py — LlamaTov end-to-end inference orchestrator.
 
@@ -271,8 +269,6 @@ def build_model(gguf_path, n_layers=16, kv_cache_f16=1):
     ]
     # Try output.weight too; if missing we'll use token_embd
     tensor_names.append("output.weight")
-    tensor_names.append("rope_freqs.weight")  # llama3 RoPE freq correction (NTK-aware)
-    _q8_reg = []  # (lw, field_name, array) for arena packing
     for li in range(cfg.n_layers):
         for suffix in ["attn_norm.weight", "attn_q.weight", "attn_k.weight",
                        "attn_v.weight", "attn_output.weight", "ffn_norm.weight",
@@ -314,14 +310,14 @@ def build_model(gguf_path, n_layers=16, kv_cache_f16=1):
 
         lw = layer_weights_arr[li]
         lw.attn_norm_w = attn_norm.ctypes.data_as(c_float_p)
-        _q8_reg.append((lw, 'w_q', w_q))
-        _q8_reg.append((lw, 'w_k', w_k))
-        _q8_reg.append((lw, 'w_v', w_v))
-        _q8_reg.append((lw, 'w_o', w_o))
+        lw.w_q = w_q.ctypes.data_as(c_uint8_p)
+        lw.w_k = w_k.ctypes.data_as(c_uint8_p)
+        lw.w_v = w_v.ctypes.data_as(c_uint8_p)
+        lw.w_o = w_o.ctypes.data_as(c_uint8_p)
         lw.ffn_norm_w = ffn_norm.ctypes.data_as(c_float_p)
-        _q8_reg.append((lw, 'w_gate', w_gate))
-        _q8_reg.append((lw, 'w_up', w_up))
-        _q8_reg.append((lw, 'w_down', w_down))
+        lw.w_gate = w_gate.ctypes.data_as(c_uint8_p)
+        lw.w_up = w_up.ctypes.data_as(c_uint8_p)
+        lw.w_down = w_down.ctypes.data_as(c_uint8_p)
 
     print(f"[load] loaded all weights in {time.time()-t0:.1f}s")
 
@@ -329,37 +325,8 @@ def build_model(gguf_path, n_layers=16, kv_cache_f16=1):
     weights.token_embd = token_embd_arr.ctypes.data_as(c_uint8_p)
     weights.layers = layer_weights_arr
     weights.output_norm_w = output_norm_arr.ctypes.data_as(c_float_p)
-    _q8_reg.append((weights, 'output_w', output_w_arr))
-    # ─── ARENA PACK (closed-form layout): all q8_0 weights into ONE contiguous,
-    # huge-page-aligned buffer, each tensor 64B-aligned. Repoint struct fields to slices.
-    import numpy as _np
-    _ALIGN = 64
-    _HP = 2 * 1024 * 1024  # 2MB huge page
-    _off = 0
-    _offsets = []
-    for (_owner, _field, _arr) in _q8_reg:
-        _offsets.append(_off)
-        _off = ((_off + _arr.nbytes + _ALIGN - 1) // _ALIGN) * _ALIGN
-    _arena_size = ((_off + _HP - 1) // _HP) * _HP
-    _arena = _np.zeros(_arena_size, dtype=_np.uint8)
-    for (_owner, _field, _arr), _o in zip(_q8_reg, _offsets):
-        _bytes = _arr.reshape(-1).view(_np.uint8)
-        _arena[_o:_o + _bytes.nbytes] = _bytes
-        _ptr = _arena.ctypes.data + _o
-        setattr(_owner, _field, ctypes.cast(_ptr, c_uint8_p))
-    weights._arena = _arena  # keep alive
-    print(f"[arena] packed {len(_q8_reg)} q8_0 tensors into {_arena_size/1048576:.0f}MB contiguous huge-page-aligned buffer")
-    # rope_freqs.weight: llama3 NTK-aware frequency correction (theta/ff). ggml applies it;
-    # omitting it (NULL) makes high-freq RoPE dims diverge. Load and pass it.
-    if "rope_freqs.weight" in offsets:
-        rope_freqs_arr = loader.load_f32(offsets["rope_freqs.weight"])
-        _keep_rope_freqs = rope_freqs_arr  # keep alive (prevent GC of the backing buffer)
-        weights.rope_freqs = rope_freqs_arr.ctypes.data_as(c_float_p)
-        print(f"[load] rope_freqs.weight loaded ({len(rope_freqs_arr)} factors): "
-              f"{rope_freqs_arr[:4]} ... {rope_freqs_arr[-2:]}")
-    else:
-        weights.rope_freqs = None
-        print("[load] rope_freqs.weight MISSING; RoPE will use ff=1 (may diverge)")
+    weights.output_w = output_w_arr.ctypes.data_as(c_uint8_p)
+    weights.rope_freqs = None  # NULL for simple RoPE (Llama 3.2 1B)
 
     # Keep references alive
     loader._layer_weights_arr = layer_weights_arr
@@ -367,7 +334,7 @@ def build_model(gguf_path, n_layers=16, kv_cache_f16=1):
 
 
 # ─── Forward pass driver ──────────────────────────────────────────────────
-def generate(lib, cfg, weights, prompt_tokens, n_generate, dump_logits_path=None, c_loop=False):
+def generate(lib, cfg, weights, prompt_tokens, n_generate, dump_logits_path=None):
     """Generate n_generate tokens via greedy argmax.
 
     Buffer sizing (per the structural test):
@@ -398,52 +365,21 @@ def generate(lib, cfg, weights, prompt_tokens, n_generate, dump_logits_path=None
     per_token_argmax = []
     all_tokens = list(prompt_tokens)
 
-    if c_loop:
-        # ── C-SIDE DECODE LOOP: prefill + generate entirely in C (no Python per-step). ──
-        import time as _t
-        prompt_arr = np.ascontiguousarray(prompt_tokens, dtype=np.int32)
-        out_tokens = np.zeros(n_generate, dtype=np.int32)
-        _t0 = _t.time()
-        lib.bpd_llama_generate_cpu(
-            prompt_arr.ctypes.data_as(c_int32_p),
-            len(prompt_tokens),
-            n_generate,
-            ctypes.byref(weights),
-            ctypes.byref(cfg),
-            k_cache.ctypes.data_as(ctypes.c_void_p),
-            v_cache.ctypes.data_as(ctypes.c_void_p),
-            out_tokens.ctypes.data_as(c_int32_p),
-        )
-        _dt = _t.time() - _t0
-        gen = [int(t) for t in out_tokens]
-        print(f"[c-loop] generated {n_generate} tokens in {_dt:.2f}s ({_dt/n_generate*1e3:.0f} ms/tok)")
-        print(f"[c-loop] tokens: {gen}")
-        return gen, gen
-
-    # INCREMENTAL DECODE: prefill the prompt once (kv_pos=0), then feed ONE new token
-    # per step at kv_pos=n_past, NEVER resetting the cache -> O(n) not O(n^2).
-    # The C forward supports n_tokens>=1 at any kv_pos (n_kv = kv_pos + n_tokens;
-    # gqa_attn attends Q over the full accumulated cache).
-    n_past = 0
     for step in range(n_generate):
-        if step == 0:
-            # PREFILL: process the whole prompt in one batch at positions 0..len-1.
-            batch = list(prompt_tokens)
-            kv_pos = 0
-        else:
-            # DECODE: feed only the single newly-generated token at position n_past.
-            batch = [all_tokens[-1]]
-            kv_pos = n_past
-        n_in = len(batch)
-        if n_past + n_in > cfg.max_seq_len:
-            raise RuntimeError(f"sequence length {n_past + n_in} exceeds max_seq_len={cfg.max_seq_len}")
-        token_ids = np.ascontiguousarray(batch, dtype=np.int32)
-        pos_ids = np.arange(kv_pos, kv_pos + n_in, dtype=np.int32)
+        n_in = len(all_tokens)
+        if n_in > cfg.max_seq_len:
+            raise RuntimeError(f"sequence length {n_in} exceeds max_seq_len={cfg.max_seq_len}")
+        token_ids = np.ascontiguousarray(all_tokens, dtype=np.int32)
+        pos_ids = np.arange(n_in, dtype=np.int32)
+        kv_pos = 0  # re-run prefill each step (simplest; we'll add incremental later)
 
-        # Logits: n_in * vocab_size F32 (one row per token IN THIS BATCH). Last row = next token.
+        # Logits: n_tokens * vocab_size F32. We take the LAST token's row.
         logits = np.zeros(n_in * cfg.vocab_size, dtype=np.float32)
         tokens_out = np.zeros(n_in, dtype=np.int64)
-        # NOTE: cache is NOT reset — it accumulates across steps.
+
+        # Reset KV cache (since kv_pos=0 each iteration)
+        k_cache[:] = 0
+        v_cache[:] = 0
 
         t0 = time.time()
         lib.bpd_llama_forward_cpu(
@@ -467,8 +403,7 @@ def generate(lib, cfg, weights, prompt_tokens, n_generate, dump_logits_path=None
 
         # Top-k diagnostic
         top_k = 10
-        _part = np.argpartition(last_logits, -top_k)[-top_k:]
-        topk_idx = _part[np.argsort(last_logits[_part])][::-1]
+        topk_idx = np.argsort(last_logits)[-top_k:][::-1]
         topk_vals = last_logits[topk_idx]
         print(f"[gen step {step}] forward {dt:.2f}s (n_in={n_in}) -> token_out[-1]={next_token} (argmax={argmax_logits})")
         print(f"  top-{top_k}: " + ", ".join(f"{int(i)}={float(v):.4f}" for i, v in zip(topk_idx, topk_vals)))
@@ -482,7 +417,6 @@ def generate(lib, cfg, weights, prompt_tokens, n_generate, dump_logits_path=None
         # Use argmax for the next token (temp=0 greedy); tokens_out should equal argmax
         generated_tokens.append(argmax_logits)
         per_token_argmax.append(argmax_logits)
-        n_past += n_in
         all_tokens.append(argmax_logits)
 
     return generated_tokens, per_token_argmax
@@ -505,7 +439,6 @@ def main():
                    help="Comma-separated input token IDs (e.g., '128000,9906,11,856,836,374')")
     p.add_argument("--prompt", default="<unknown>",
                    help="Original prompt text (for reporting only)")
-    p.add_argument("--c-loop", action="store_true", help="Use the C-side decode loop (no Python per-step)")
     p.add_argument("--n-generate", type=int, default=8,
                    help="Number of tokens to generate")
     p.add_argument("--temperature", type=float, default=0.0)
@@ -523,17 +456,6 @@ def main():
 
     print(f"[init] loading library: {args.so}")
     lib = ctypes.CDLL(args.so)
-    lib.bpd_llama_generate_cpu.restype = None
-    lib.bpd_llama_generate_cpu.argtypes = [
-        c_int32_p,                              # prompt_tokens
-        ctypes.c_int,                           # prompt_len
-        ctypes.c_int,                           # n_generate
-        ctypes.POINTER(BpdLlamaWeights),        # weights
-        ctypes.POINTER(BpdLlamaConfig),         # cfg
-        ctypes.c_void_p,                        # k_cache
-        ctypes.c_void_p,                        # v_cache
-        c_int32_p,                              # out_tokens
-    ]
     lib.bpd_llama_forward_cpu.restype = None
     lib.bpd_llama_forward_cpu.argtypes = [
         c_int32_p, ctypes.c_int,
@@ -553,8 +475,7 @@ def main():
     t0 = time.time()
     generated, per_step_argmax = generate(lib, cfg, weights, prompt_tokens,
                                           args.n_generate,
-                                          dump_logits_path=args.dump_logits,
-                                          c_loop=args.c_loop)
+                                          dump_logits_path=args.dump_logits)
     dt = time.time() - t0
     print(f"[done] generated {len(generated)} tokens in {dt:.1f}s")
     print(f"[done] tokens: {generated}")

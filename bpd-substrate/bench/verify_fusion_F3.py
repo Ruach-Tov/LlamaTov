@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_fusion_F3.py — verify Conv+BN+SiLU fused kernel is BIT_IDENTICAL with unfused.
 
 For each test shape, runs:

@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% qkv_lifter.pl — Lift QKV BPD facts from llama.cpp Qwen2 C source.
 %%
 %% Per mavchin's direction: "do the actual llama.cpp Qwen2 lifter."

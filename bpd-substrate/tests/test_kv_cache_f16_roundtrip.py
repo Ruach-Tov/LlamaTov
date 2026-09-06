@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """test_kv_cache_f16_roundtrip.py — Isolated test for f16 KV cache write+read.
 
 Tests the exact sequence: f32 → bpd_kv_cache_write_f16_cpu → f16 cache → dequant → f32

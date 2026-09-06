@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% generate_fused_kernels.pl — FUSED CUDA kernels via Prolog AST emission
 %%
 %% Per Heath's directive (via medayek 2026-05-16 00:31): beat cuBLAS via

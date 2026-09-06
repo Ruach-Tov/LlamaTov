@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """replay_gate.py — Detect orchestrator wiring bugs by replaying the compute graph.
 
 Unlike per_op_gates (which tests each op in isolation using fixture inputs),

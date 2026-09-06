@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 /* bpd_quant.c — Q4_K_M dequantization + quantized matmul (CPU)
  *
  * Implements llama.cpp-compatible Q4_K dequantization.

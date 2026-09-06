@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% pytorch_ast.pl — Bidirectional Prolog DCG for PyTorch model AST
 %%
 %% Parses a PyTorch nn.Module tree (as JSON) into BPD compute graph facts.

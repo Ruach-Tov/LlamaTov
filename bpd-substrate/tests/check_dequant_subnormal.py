@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Direct test of bpd_dequant_q8_0_cpu on a single block with a known subnormal F16 scale."""
 import ctypes
 import numpy as np

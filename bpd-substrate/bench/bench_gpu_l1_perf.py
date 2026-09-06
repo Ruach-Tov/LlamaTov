@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 import numpy as np, ctypes, torch, torch.nn as nn, time
 
 lib = ctypes.CDLL("build/bpd_gpu.so")

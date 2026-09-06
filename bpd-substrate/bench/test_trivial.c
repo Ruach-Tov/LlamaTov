@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 /* test_trivial.c
  * Hand-verifiable correctness tests for bpd_cpu.c matmul kernels.
  * Every expected value is computed by hand or is trivially exact in float32.

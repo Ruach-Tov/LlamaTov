@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Verify bit-identical (0 ULP) output between BPD and PyTorch/cuBLAS.
 
 Sweeps all available kernel types and matrix shapes.

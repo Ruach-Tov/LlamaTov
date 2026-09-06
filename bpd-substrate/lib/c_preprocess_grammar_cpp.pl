@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% c_preprocess_grammar_cpp.pl — GCC cpp grammar in Prolog form
 %%
 %% This module owns the preprocessor-grammar concerns that were

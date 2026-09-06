@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% nvml_bridge_emitter.pl — Generate LLVM IR for the NVML-to-SWI-Prolog bridge.
 %%
 %% Emits a .ll file that, when compiled with llc + clang, produces a .so

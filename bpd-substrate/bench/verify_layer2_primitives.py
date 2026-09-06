@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_layer2_primitives.py — Bit-identity verification for bpd_residual_add_cpu
 and bpd_concat_channel_cpu.
 

@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% c_preprocess.pl — C preprocessor layer for the BPD substrate.
 %%
 %% This module sits between raw .cpp source files and the c_ast.pl parser.
@@ -61,7 +59,13 @@
     filter_cpp_output/4,           % +CppOutputLines, +TargetFile, +Range, -EmittedLines
     parse_line_directive/4,        % +Line, -FileName, -LineNumber, -Flags
     preprocess_file_segment/4,     % +SourcePath, +IncludePaths, +Range, -ExpandedText
-    preprocess_file_segment/5      % +SourcePath, +IncludePaths, +Range, -ExpandedText, -LineMap
+    preprocess_file_segment/5,     % +SourcePath, +IncludePaths, +Range, -ExpandedText, -LineMap
+
+    %% In-memory cache (added 2026-05-29 per Iyun's L6-climb request)
+    preprocess_file_segment_cached/4,  % +SourcePath, +IncludePaths, +Range, -ExpandedText
+    preprocess_file_segment_cached/5,  % +SourcePath, +IncludePaths, +Range, -ExpandedText, -LineMap
+    clear_preprocess_cache/0,          % manual invalidation
+    preprocess_cache_stats/1           % -stats(Entries, Hits, Misses)
 ]).
 
 :- use_module(library(lists)).
@@ -326,3 +330,112 @@ run_cpp(Args, Stdout, Stderr, ExitCode) :-
     close(Out),
     close(Err),
     process_wait(Pid, exit(ExitCode)).
+
+
+%% ================================================================
+%% IN-MEMORY CACHE LAYER
+%% ================================================================
+%%
+%% Added 2026-05-29 per Iyun's request for the L6 measurable-climb work.
+%% Each preprocess_file_segment call shells out to g++ -E (~1s per call).
+%% For climb-iteration workloads (re-measure as gaps close), the same
+%% (file, includes, range) triples get re-evaluated many times. This
+%% cache memoizes them, making warm-cache lookups sub-millisecond.
+%%
+%% Cache key: (CanonicalSourcePath, SortedIncludePaths, MStart, NEnd)
+%% Cache value: (ExpandedText, LineMap, SourceMtime)
+%%
+%% Invalidation: source-file mtime. On every cached call we re-stat the
+%% source and recompute if mtime changed. This handles the common climb
+%% workflow (edit c_ast, NOT llama.cpp; re-measure). It does NOT handle
+%% header changes — for the climb that's fine because headers are stable
+%% during a climb session. The on-disk shared cache (future, for the
+%% multi-agent push) will need content-hashing of headers; that's a
+%% separate substrate.
+%%
+%% Hit/miss counters via flag are best-effort, not thread-safe; they're
+%% diagnostic, not load-bearing.
+
+:- dynamic cached_segment/5.
+%% cached_segment(+CacheKey, -ExpandedText, -LineMap, -SourceMtime, -CachedAt)
+
+:- dynamic cache_hit_count/1.
+:- dynamic cache_miss_count/1.
+cache_hit_count(0).
+cache_miss_count(0).
+
+
+%% preprocess_file_segment_cached(+SourcePath, +IncludePaths, +Range, -ExpandedText)
+preprocess_file_segment_cached(SourcePath, IncludePaths, Range, ExpandedText) :-
+    preprocess_file_segment_cached(SourcePath, IncludePaths, Range, ExpandedText, _LineMap).
+
+
+%% preprocess_file_segment_cached(+SourcePath, +IncludePaths, +Range, -ExpandedText, -LineMap)
+%%
+%% Cached version of preprocess_file_segment/5. Memoizes on
+%% (canonical-path, sorted-includes, range). Invalidates on source mtime
+%% change. Use this in workloads that re-call with the same arguments
+%% many times (e.g. L6 climb).
+preprocess_file_segment_cached(SourcePath, IncludePaths, Range, ExpandedText, LineMap) :-
+    %% Build a normalized cache key
+    absolute_file_name(SourcePath, AbsPath),
+    sort(IncludePaths, SortedIncludes),
+    Range = range(MStart, NEnd),
+    CacheKey = key(AbsPath, SortedIncludes, MStart, NEnd),
+
+    %% Get current source mtime for invalidation check
+    time_file(AbsPath, CurrentMtime),
+
+    (   cached_segment(CacheKey, CachedText, CachedLineMap, CachedMtime, _)
+    ->  (   CachedMtime =:= CurrentMtime
+        ->  %% Cache hit
+            increment_counter(cache_hit_count),
+            ExpandedText = CachedText,
+            LineMap = CachedLineMap
+        ;   %% Stale entry — retract and recompute
+            retract(cached_segment(CacheKey, _, _, _, _)),
+            compute_and_cache(SourcePath, IncludePaths, Range, AbsPath,
+                              SortedIncludes, MStart, NEnd, CurrentMtime,
+                              ExpandedText, LineMap)
+        )
+    ;   %% No cache entry — compute fresh
+        compute_and_cache(SourcePath, IncludePaths, Range, AbsPath,
+                          SortedIncludes, MStart, NEnd, CurrentMtime,
+                          ExpandedText, LineMap)
+    ).
+
+
+%% Internal helper: actually run the preprocessor and cache the result.
+compute_and_cache(SourcePath, IncludePaths, Range, AbsPath,
+                  SortedIncludes, MStart, NEnd, Mtime,
+                  ExpandedText, LineMap) :-
+    increment_counter(cache_miss_count),
+    preprocess_file_segment(SourcePath, IncludePaths, Range, ExpandedText, LineMap),
+    get_time(Now),
+    CacheKey = key(AbsPath, SortedIncludes, MStart, NEnd),
+    assertz(cached_segment(CacheKey, ExpandedText, LineMap, Mtime, Now)).
+
+
+%% clear_preprocess_cache  —  retract all cached entries; reset counters.
+clear_preprocess_cache :-
+    retractall(cached_segment(_, _, _, _, _)),
+    retractall(cache_hit_count(_)),
+    retractall(cache_miss_count(_)),
+    assertz(cache_hit_count(0)),
+    assertz(cache_miss_count(0)).
+
+
+%% preprocess_cache_stats(-stats(Entries, Hits, Misses))
+preprocess_cache_stats(stats(Entries, Hits, Misses)) :-
+    aggregate_all(count, cached_segment(_, _, _, _, _), Entries),
+    cache_hit_count(Hits),
+    cache_miss_count(Misses).
+
+
+%% Internal: increment a dynamic counter.
+increment_counter(CounterName) :-
+    Goal =.. [CounterName, OldVal],
+    retract(Goal),
+    NewVal is OldVal + 1,
+    NewGoal =.. [CounterName, NewVal],
+    assertz(NewGoal).

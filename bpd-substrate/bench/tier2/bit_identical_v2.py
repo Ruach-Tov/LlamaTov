@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """bit_identical_v2_with_conv.py — Extended sweep covering conv stubs.
 
 Adds: conv_1d, conv_3d, conv_transpose_2d as test cases. These use a

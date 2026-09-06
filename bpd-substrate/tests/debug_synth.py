@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Debug: what F16 scale is in block 0 of attn_q.weight, and what does our kernel produce?"""
 import sys, os, ctypes
 sys.path.insert(0, "/tmp/bpd_test/bench")
@@ -11,7 +9,7 @@ lib = ctypes.CDLL(SO)
 lib.bpd_dequant_q8_0_cpu.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
 lib.bpd_dequant_q8_0_cpu.restype = None
 
-gguf = "/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
+gguf = "/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45"
 info = query_tensor(gguf, "blk.0.attn_q.weight")
 raw = read_tensor_bytes(gguf, info)
 print(f"raw type: {type(raw)}, dtype: {raw.dtype}")

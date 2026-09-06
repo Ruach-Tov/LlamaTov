@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% arch_summary.pl — Lift per-arch summary forms (Phase 4 of llama.cpp ingestion).
 %%
 %% Per Heath's directive (2026-05-16 ~03:00 UTC): "lifting the per-arch

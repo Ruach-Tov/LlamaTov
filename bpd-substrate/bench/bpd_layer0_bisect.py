@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """bpd_layer0_bisect.py — bisect WITHIN layer 0 to find first divergent op.
 
 Layer 0 captured operations in /tmp/llama_dump_hello_8:

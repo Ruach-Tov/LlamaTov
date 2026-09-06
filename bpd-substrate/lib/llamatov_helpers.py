@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """LlamaTov inference helpers — quantization dequant + layer operations.
 
 Extends llamatov_loader.py with the operations needed for full transformer

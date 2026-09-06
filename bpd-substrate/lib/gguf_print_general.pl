@@ -1,6 +1,4 @@
 #!/usr/bin/env swipl
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 % gguf_print_general.pl — Print the general.* metadata K-V pairs from a GGUF file.
 %
 % Usage:
@@ -30,7 +28,7 @@
 
 % Default file: nomic-embed-text-v1.5 (262MB; first 64KB has all general.*)
 default_gguf_file(
-    '${OLLAMA_BLOBS:-~/.ollama/models/blobs}/\c
+    '/home/heath/.ollama/models/blobs/\c
 sha256-970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6').
 
 read_first_bytes(Path, N, Bytes) :-

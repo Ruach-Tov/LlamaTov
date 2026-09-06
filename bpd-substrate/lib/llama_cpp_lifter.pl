@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% llama_cpp_lifter.pl — Lift BPD facts from llama.cpp source via c_ast.
 %%
 %% Per Heath's directive (2026-05-16 ~01:55 UTC, option 1 of 4 next-direction options):

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """test_opmath_precision_invariance.py — TDD harness for opmath-precision invariance.
 
 Per Heath's substantive substrate-design direction 2026-05-20 ~17:50 UTC:

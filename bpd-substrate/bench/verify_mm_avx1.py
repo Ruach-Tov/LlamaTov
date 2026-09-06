@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """Verify bpd_mm_cpu_avx1 BIT_IDENTICAL with bpd_mm_cpu (scalar).
 
 Test at YOLOv5n GEMM shapes: M=Cout, N=spatial_out, K=Cin*kH*kW.

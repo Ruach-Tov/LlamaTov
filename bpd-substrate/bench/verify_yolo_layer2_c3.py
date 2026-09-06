@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_yolo_layer2_c3.py — Layer 2 (first C3) end-to-end bit-identity vs PyTorch CPU.
 
 Per Heath's discipline:

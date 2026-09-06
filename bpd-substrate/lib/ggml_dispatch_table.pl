@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% ggml_dispatch_table.pl — Maps BPD op_kind to ggml C function calls
 %%
 %% Usage:

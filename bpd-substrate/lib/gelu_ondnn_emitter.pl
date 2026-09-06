@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% gelu_ondnn_emitter.pl — Generate VECTORIZED LLVM IR matching oneDNN's JIT.
 %%
 %% Uses <8 x float> vector types (AVX-256) to match the JIT's ymm operations.

@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% gguf_dump_manifest.pl \u2014 dump GGUF metadata + tensor offsets in JSON for inference orchestration.
 %%
 %% Usage: swipl -q -g "consult('tests/gguf_dump_manifest.pl'), gguf_dump_main" -- <gguf_path> <output_json>

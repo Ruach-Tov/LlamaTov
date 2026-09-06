@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """llama_fixture_loader.py — load binary tensor dumps from llama.cpp's patched eval-callback.
 
 Phase L.1.0 fixture-loading helper. Each .bin file animates a single ggml tensor

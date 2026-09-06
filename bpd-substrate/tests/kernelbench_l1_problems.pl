@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% kernelbench_l1_problems.pl — Stanford KernelBench L1 problem definitions.
 %% 100 single-operator problems. Per medayek's L3 analysis:
 %% "L1 validates op classification completeness, not fusion."

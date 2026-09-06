@@ -1,9 +1,7 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """gguf_reader.py — generated from gguf.bpd by generate.py.
 
 DO NOT EDIT BY HAND. Regenerate with `python generate.py`.
-Source declaration: <repo>/must_close/boundary_dsl/file-formats/gguf/gguf.bpd
+Source declaration: /home/heath/Ruach-Tov/must_close/boundary_dsl/file-formats/gguf/gguf.bpd
 """
 from __future__ import annotations
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """pt_to_weights.py v2 — Export weights with BN folded into Conv.
 
 BN folding eliminates the BatchNorm ops entirely:

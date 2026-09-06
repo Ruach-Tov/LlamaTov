@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 ; ============================================================
 ; im2col_1d: rearrange input for convolution
 ; void im2col_1d(i32 n_out, i32 kernel, i32 stride, ptr col, ptr src)

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """verify_yolo_layer9_sppf.py — Verify Layer 9 SPPF BIT_IDENTICAL.
 
 YOLOv5n's SPPF (Spatial Pyramid Pooling Fast):

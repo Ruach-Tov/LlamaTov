@@ -1,5 +1,3 @@
-%% SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-%% Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 %% Auto-generated kernel signature catalog
 %% Subtask 2b — Tier 2 plan 8d65ba1c-5782-47f4-82a3-fa017b727e96
 %% Reflectively extracted from substrate's emit predicates.

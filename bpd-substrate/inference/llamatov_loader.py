@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """LlamaTov GGUF tensor loader — minimal helper for janus_swi.
 
 Provides load_tensor() that reads bytes from a GGUF file at a known

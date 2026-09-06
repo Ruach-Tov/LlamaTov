@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-# Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 """bit_identical_v3.py — Extended sweep: norms + losses + pool + cumulative.
 
 Per Heath's plan 8d65ba1c subtasks 2c through 2g (Track A). Extends the

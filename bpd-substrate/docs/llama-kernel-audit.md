@@ -12,7 +12,7 @@
 
 **Target model**: `llama3.2:1b` (architecture=llama, 1.2B params, Q8_0 quantization, embedding 2048, ctx 131072 trained).
 
-**GGUF path**: `/tmp/llamatov-data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45` (1.32 GB, world-readable).
+**GGUF path**: `/mnt/data/ollama/models/blobs/sha256-74701a8c35f6c8d9a4b91f3f3497643001d63e0c7a84e085bed452548fa88d45` (1.32 GB, world-readable).
 
 **Empirical reference run** (greedy, temp=0.0, seed=42):
 

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR LicenseRef-RTAAL-1.1
-// Copyright (c) 2026 Heath Hunnicutt and the Ruach Tov collective.
 declare float @tanhf(float)
 
 define void @bpd_tanh_fixed(i32 %n, ptr %dst, ptr %src) {
