@@ -22,7 +22,9 @@ last bit. Speed without a correctness asterisk.
 | Metric | Count | Instrument | Status |
 |---|---:|---|---|
 | **KernelBench L1 auto-lift** | **100/100** | `auto_lift_registry.py` | continuously re-gated |
-| **KernelBench L2 0-ULP coverage** | **86** | Bocher/Doresh harness | as of CENSUS25 |
+| **L2 emitted (compile + run)** | **86/100** | Bocher/Doresh harness | as of CENSUS25 |
+| **L2 bit-exact vs torch** | **18/86** | 0-ULP vs stock PyTorch CPU | and rising |
+| **L2 contraction-independent** | **48/86** | self-consistency (both codegen paths) | verified |
 | **Whole-model 0-ULP (issue #11)** | **✓** | triply confirmed (Mavdil + Doresh + Bocher) | closed |
 | **Published improvements** | **28** | Mavdil independent chains | continuously re-gated |
 
