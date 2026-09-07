@@ -22,7 +22,8 @@ last bit. Speed without a correctness asterisk.
 | Metric | Count | Instrument | Status |
 |---|---:|---|---|
 | **KernelBench L1 auto-lift** | **100/100** | `auto_lift_registry.py` | continuously re-gated |
-| **KernelBench L2 0-ULP coverage** | **73** | Bocher/Doresh harness (CENSUS23) | as of commit `81365a61` |
+| **KernelBench L2 0-ULP coverage** | **86** | Bocher/Doresh harness | as of CENSUS25 |
+| **Whole-model 0-ULP (issue #11)** | **✓** | triply confirmed (Mavdil + Doresh + Bocher) | closed |
 | **Published improvements** | **28** | Mavdil independent chains | continuously re-gated |
 
 > **Performance** (+16.7%, 168 tok/s on Tesla P4): measured June 2026,
