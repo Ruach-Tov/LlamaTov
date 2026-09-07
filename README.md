@@ -21,12 +21,25 @@ last bit. Speed without a correctness asterisk.
 
 | Metric | Count | Instrument | Status |
 |---|---:|---|---|
+| **Whole-model bit-exact** | **4/100** | end-to-end wrapper, given benchmark inputs | and rising |
 | **KernelBench L1 auto-lift** | **100/100** | `auto_lift_registry.py` | continuously re-gated |
-| **L2 emitted (compile + run)** | **86/100** | Bocher/Doresh harness | as of CENSUS25 |
-| **L2 bit-exact vs torch** | **18/86** | 0-ULP vs stock PyTorch CPU | and rising |
-| **L2 contraction-independent** | **48/86** | self-consistency (both codegen paths) | verified |
-| **Whole-model 0-ULP (issue #11)** | **✓** | triply confirmed (Mavdil + Doresh + Bocher) | closed |
 | **Published improvements** | **28** | Mavdil independent chains | continuously re-gated |
+
+The **whole-model** count is what a journalist means by "100%": the entire
+model reproduces bit-exactly given the benchmark's own inputs. Today: 4,
+rising toward ~70 (mechanically reachable), target 100.
+
+<details>
+<summary>Detail: per-layer coverage</summary>
+
+| Layer | Count | Instrument |
+|---|---:|---|
+| L2 emitted (compile + run) | 86/100 | Bocher/Doresh harness (CENSUS25) |
+| L2 bit-exact vs torch (epilogue) | 18/86 | 0-ULP vs stock PyTorch CPU |
+| L2 contraction-independent | 48/86 | self-consistency (both codegen paths) |
+| Whole-model 0-ULP (issue #11) | ✓ | triply confirmed (Mavdil + Doresh + Bocher) |
+
+</details>
 
 > **Performance** (+16.7%, 168 tok/s on Tesla P4): measured June 2026,
 > not continuously re-validated. Correctness claims ARE continuously
