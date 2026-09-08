@@ -21,13 +21,14 @@ last bit. Speed without a correctness asterisk.
 
 | Metric | Count | Instrument | Status |
 |---|---:|---|---|
-| **Whole-model bit-exact** | **4/100** | end-to-end wrapper, given benchmark inputs | and rising |
+| **Whole-model bit-exact** | **100/100** | end-to-end wrapper, given benchmark inputs | census46 signed |
 | **KernelBench L1 auto-lift** | **100/100** | `auto_lift_registry.py` | continuously re-gated |
 | **Published improvements** | **28** | Mavdil independent chains | continuously re-gated |
 
 The **whole-model** count is what a journalist means by "100%": the entire
-model reproduces bit-exactly given the benchmark's own inputs. Today: 4,
-rising toward ~70 (mechanically reachable), target 100.
+model reproduces bit-exactly given the benchmark's own inputs. Census46 (Mavdil, commit 61a728899): BIT_EXACT 100 · DIFFERS 0 · SKIPPED 0 · OF 100.
+Bit-exact at the benchmark's inputs — not "correct on every input," but reproduces
+the whole model to the last bit given the benchmark's own test vectors.
 
 <details>
 <summary>Detail: per-layer coverage</summary>
