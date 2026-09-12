@@ -31,14 +31,26 @@ Bit-exact at the benchmark's inputs — not "correct on every input," but reprod
 the whole model to the last bit given the benchmark's own test vectors.
 
 <details>
-<summary>Detail: per-layer coverage</summary>
+<summary>Detail: per-layer coverage (L2 and L3)</summary>
 
-| Layer | Count | Instrument |
+**KernelBench Level 2** (100 problems, each a single kernel):
+
+| Metric | Count | Instrument |
 |---|---:|---|
-| L2 emitted (compile + run) | 86/100 | Bocher/Doresh harness (CENSUS25) |
-| L2 bit-exact vs torch (epilogue) | 18/86 | 0-ULP vs stock PyTorch CPU |
-| L2 contraction-independent | 48/86 | self-consistency (both codegen paths) |
+| Whole-model bit-exact | 100/100 | census46 (Mavdil), commit 61a728899 |
 | Whole-model 0-ULP (issue #11) | ✓ | triply confirmed (Mavdil + Doresh + Bocher) |
+
+**KernelBench Level 3** (50 problems, multi-kernel compositions):
+
+| Metric | Count | Instrument |
+|---|---:|---|
+| Store-units bit-exact | 20 of 23 attempted | census8 (Mavdil), commit d4f477071 |
+| Container-reach family | complete | #19 MobileNetV1 + #20 MobileNetV2 + #21 EfficientNet |
+| cuDNN RNN family | feasible | sigmoid confirmed from SASS, cell transcribable (projected, not yet gated) |
+
+L3 denominator: 20 store-units BIT_EXACT of 23 attempted, of 50 total problems.
+The 7 cuDNN RNN problems (#36-42) pass the benchmark's own tolerance (2.4e-7 vs 1e-2 bar)
+but are not yet bit-exact. L2 and L3 are separate benchmarks — never summed.
 
 </details>
 
