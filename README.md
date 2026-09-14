@@ -44,11 +44,14 @@ the whole model to the last bit given the benchmark's own test vectors.
 
 | Metric | Count | Instrument |
 |---|---:|---|
-| Store-units bit-exact | 20 of 23 attempted | census8 (Mavdil), commit d4f477071 |
+| Store-units bit-exact | 22 of 28 emitted | census-ten (Mavdil), cut 48689a76d |
 | Container-reach family | complete | #19 MobileNetV1 + #20 MobileNetV2 + #21 EfficientNet |
+| First transformer row | #29 Swin | gated 36/36 bit-exact, independently verified |
 | cuDNN RNN family | feasible | sigmoid confirmed from SASS, cell transcribable (projected, not yet gated) |
 
-L3 denominator: 20 store-units BIT_EXACT of 23 attempted, of 50 total problems.
+L3 has two denominators (never merged):
+- 22 of 28 = BIT_EXACT of emitted store-units
+- Pipeline three-way: 27 producible / 9 in-reach / 14 gaps = 50 total problems
 The 7 cuDNN RNN problems (#36-42) pass the benchmark's own tolerance (2.4e-7 vs 1e-2 bar)
 but are not yet bit-exact. L2 and L3 are separate benchmarks — never summed.
 
