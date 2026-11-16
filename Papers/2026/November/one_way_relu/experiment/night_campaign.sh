@@ -4,7 +4,7 @@
 # Phase 1: statistical power — relu/leaky_10/oneway_10 seeds 5..24 (20 more each).
 # Phase 2: grokking probe — 100 epochs, 3 arms x 3 seeds, checkpoints saved.
 # Phase 3: oneway_5 + oneway_1000 seed extension (5..14) for the dose curve.
-cd /mnt/data/shared/one_way_leaky
+cd "${ONEWAY_DIR:-$(dirname "$0")}"
 while pgrep -f 'factorial_emnist[.]py --' > /dev/null; do sleep 30; done
 
 echo "══ PHASE 1: seed extension to n=25 ══" >> night.log

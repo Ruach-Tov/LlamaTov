@@ -1,7 +1,7 @@
 #!/bin/bash
 # Campaign 2 (Heath, 2026-11-15 evening): n=50 everywhere + alpha grid {2.5,5,10,20} thousandths.
 # All runs save checkpoints for classical-stats + latent analysis at scale.
-cd /mnt/data/shared/one_way_leaky
+cd "${ONEWAY_DIR:-$(dirname "$0")}"
 R="--epochs 10 --device cuda --out results_emnist.jsonl --save-ckpt ckpt_e10"
 echo "══ C2 PHASE A: core arms to n=50 ══" >> night.log
 python3 factorial_emnist.py --arms relu leaky_10 oneway_10 --seed-start 25 --seeds 25 $R >> night.log 2>&1
