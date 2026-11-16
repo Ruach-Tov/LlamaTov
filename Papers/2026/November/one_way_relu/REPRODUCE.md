@@ -19,6 +19,9 @@ instrument that produced it and how to re-run that instrument:
 - `experiment/` — the training testbed.
   - `activations.py` — one-way-leaky as `torch.autograd.Function`
     (the reference implementation the kernels are verified against).
+  - `factorial.py` — the original MNIST variant of the harness;
+    exports shared helpers (`Net`, `dead_stats`, idx reader) that
+    `factorial_emnist.py` imports.
   - `factorial_emnist.py` — paired-seed factorial harness
     (EMNIST-Balanced; `--arms`, `--seeds`, `--optimizer {adam,sgd}`,
     `--amp-log` Adam-amplification instrument, `--save-ckpt`).
@@ -43,9 +46,18 @@ instrument that produced it and how to re-run that instrument:
 
 ## Data
 
-EMNIST-Balanced is fetched from the NIST source (idx format); the
-loader in `factorial_emnist.py` documents the expected layout
-(`data_emnist/`). No preprocessed data ships here — determinism comes
+EMNIST-Balanced (Cohen et al. 2017), idx format. Download the gzip
+archive from the NIST page
+(`https://www.nist.gov/itl/products-and-services/emnist-dataset` —
+"binary format as the original MNIST dataset" link) and place these
+four files, still gzipped, in `experiment/data_emnist/`:
+
+    emnist-balanced-train-images-idx3-ubyte.gz
+    emnist-balanced-train-labels-idx1-ubyte.gz
+    emnist-balanced-test-images-idx3-ubyte.gz
+    emnist-balanced-test-labels-idx1-ubyte.gz
+
+The loader reads them gzipped; do not extract. No preprocessed data ships here — determinism comes
 from seeds: every comparison is paired at bit-identical initialization
 (seed k produces identical weights in every arm; verified by direct
 tensor comparison).

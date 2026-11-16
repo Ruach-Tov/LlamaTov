@@ -24,7 +24,7 @@ CONTRACT (what this measures, honestly):
        - EXTRAPOLATED to wider nets (activation-heavy): marked EXTRAPOLATED.
 
 USAGE (on the enclave, system python3 with cuda=True, when the P4 is free):
-  /run/current-system/sw/bin/python3 p4_run_harness.py [--n 1000000] [--iters 100]
+  the system Python with CUDA-torch (python3 on most systems; /run/current-system/sw/bin/python3 on NixOS) p4_run_harness.py [--n 1000000] [--iters 100]
 
 NOTE: requires CUDA-torch (enclave system python3) + the pre-built cubins in cwd.
 This is a SKELETON pending the THE-CARD-IS-YOURS ping — the cubins are ready;

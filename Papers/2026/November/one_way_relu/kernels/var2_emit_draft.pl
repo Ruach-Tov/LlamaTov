@@ -2,7 +2,7 @@
 %% via a two-input (var2) extension to expr_ir.pl's single-input elementwise IR.
 %%
 %% Author: Iyun (2026-11-16). Canonical-emission lane for the fused-kernel build.
-%% Spec-by-example: bpd/experiments/one_way_leaky/kernels/oneway_backward_cpu.ll
+%% Spec-by-example: oneway_backward_cpu.ll (in this directory)
 %%   (Bocher's hand-written prototype, commit 6e31afbd1 — the fixed target).
 %%
 %% CONTRACT (from the 3-part fixed target):
