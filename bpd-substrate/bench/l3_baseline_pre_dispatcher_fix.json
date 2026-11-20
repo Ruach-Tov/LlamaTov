@@ -1,0 +1,46 @@
+{
+  "args": {
+    "gguf": "/home/heath/Ruach-Tov/external/llama.cpp/models/llama-3.2-1b-instruct-q8_0.gguf",
+    "tokens": "128000,9906,11,856,836,374",
+    "n_generate": 2,
+    "llama_dump_bin": "/tmp/llama_logits_dump",
+    "bpd_so": "/tmp/bpd_test/build/bpd_cpu.so",
+    "infer_script": "bench/bpd_llamatov_infer.py",
+    "abs_tol": 1e-05,
+    "out": "/tmp/l3_composite_result.json"
+  },
+  "per_step": [
+    {
+      "n_vocab": 128256,
+      "bit_identical": 0,
+      "pass_abs_tolerance": 13,
+      "fail": 128243,
+      "max_ulp": 2356538112,
+      "median_ulp": 280023,
+      "max_abs_diff": 0.1971287727355957,
+      "argmax_match": true,
+      "argmax_ours": 35266,
+      "argmax_theirs": 35266,
+      "step": 0
+    },
+    {
+      "n_vocab": 128256,
+      "bit_identical": 0,
+      "pass_abs_tolerance": 20,
+      "fail": 128236,
+      "max_ulp": 2328966912,
+      "median_ulp": 274358,
+      "max_abs_diff": 0.2271404266357422,
+      "argmax_match": true,
+      "argmax_ours": 323,
+      "argmax_theirs": 323,
+      "step": 1
+    }
+  ],
+  "summary": {
+    "n_steps": 2,
+    "all_bit_identical": false,
+    "argmax_all_match": true,
+    "max_ulp_across_steps": 2356538112
+  }
+}

@@ -286,9 +286,9 @@ preprocess_file_segment(SourcePath, IncludePaths, range(MStart, NEnd), ExpandedT
     append(['-E' | IFlags], [SourcePath], CppArgs),
 
     %% Invoke cpp, capture stdout and stderr.
-    run_cpp(CppArgs, CppStdout, _CppStderr, ExitCode),
+    run_cpp(CppArgs, CppStdout, CppStderr, ExitCode),
     ( ExitCode =\= 0
-    -> throw(error(cpp_failed(ExitCode, _CppStderr),
+    -> throw(error(cpp_failed(ExitCode, CppStderr),
                    context(source(SourcePath),
                            include_paths(IncludePaths),
                            args(CppArgs))))

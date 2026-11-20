@@ -106,7 +106,7 @@ emit_compound(cbs, Name, Children, Facts) :-
     atom_string(ActAtom, ActName),
     atom_concat(ConvAtom, '_out', ConvOut),
     atom_concat(BnAtom, '_out', BnOut),
-    atom_concat(ActAtom, '_out', ActOut),
+    atom_concat(ActAtom, '_out', _ActOut),
     atom_concat(Name, '_out', NameOut),
     Facts = [
         op_inputs(ConvAtom, [Name]),       % conv reads from parent input
@@ -150,7 +150,7 @@ emit_compound(c3, Name, Children, Facts) :-
     atom_concat(Cv2Atom, '_out', Cv2Out),
     atom_concat(Name, '_concat', ConcatName),
     atom_concat(ConcatName, '_out', ConcatOut),
-    atom_concat(Cv3Atom, '_out', Cv3Out),
+    atom_concat(Cv3Atom, '_out', _Cv3Out),
     atom_concat(Name, '_out', NameOut),
     %% Data flow: input → cv1 → bottlenecks → concat with cv2(input) → cv3
     Facts = [

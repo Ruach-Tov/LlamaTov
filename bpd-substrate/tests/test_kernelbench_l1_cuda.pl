@@ -29,10 +29,66 @@
 :- use_module('../lib/kernel_templates').
 
 %% Architecture target for compilation
+
+%% cuda_include_flag(-Flag): the -I for CUDA headers. nvcc sometimes can't find cuda_runtime.h on a
+%% bare PATH (it relies on the toolkit layout). Try $CUDA_INCLUDE, then $CUDA_HOME/include, then
+%% derive from `which nvcc` (bin/../include). Empty if none found (nvcc's own default path is used).
+:- dynamic toolchain_fact/2.
+
+%% toolchain_include(-Inc): read the include dir from the SHARED toolchain facts (bpd/lib/toolchain.py
+%% via write_prolog_facts -> /tmp/toolchain_facts.pl) — the single source of CUDA-env truth. Prefer it
+%% so the Prolog harness and production learn env TOGETHER. Falls through if absent (substrate-honest).
+toolchain_include(Inc) :-
+    exists_file('/tmp/toolchain_facts.pl'),
+    catch(consult('/tmp/toolchain_facts.pl'), _, fail),
+    toolchain_fact('cuda_include', Inc).
+
+cuda_include_flag(Flag) :-
+    ( toolchain_include(TInc), TInc \= ''
+    -> format(atom(Flag), '-I~w', [TInc])
+    ;  getenv('CUDA_INCLUDE', Inc), Inc \= ''
+    -> format(atom(Flag), '-I~w', [Inc])
+    ;  getenv('CUDA_HOME', Home), Home \= '',
+       atom_concat(Home, '/include', Inc)
+    -> format(atom(Flag), '-I~w', [Inc])
+    %% nix split-output fallback: nvcc's own package has no include/; the
+    %% merged toolkit (same default as fact_dispatch.py) does. Check it
+    %% BEFORE the derive-from-nvcc heuristic, which fails on nix.
+    ;  Merged = '/nix/store/3y4mvymhwmnfi5d0vwyzcw7f7sqnqnkd-cuda-merged-12.8/include',
+       exists_directory(Merged)
+    -> format(atom(Flag), '-I~w', [Merged])
+    ;  catch(( setup_call_cleanup(
+                 process_create(path(sh), ['-c', 'dirname $(dirname $(readlink -f $(which nvcc)))'],
+                                [stdout(pipe(O)), process(P)]),
+                 ( read_string(O, _, S0), process_wait(P, _) ),
+                 close(O)),
+               atom_string(Root, S0)), _, fail),
+       split_string(Root, "\n", "", [RootS|_]), RootS \= "",
+       format(atom(Flag), '-I~w/include', [RootS])
+    -> true
+    ;  Flag = '' ).
+
 target_arch('sm_61').
 
+%% nvcc_bin(-Bin): the FULL-toolkit nvcc. The bare PATH nvcc on nix is the
+%% split cuda_nvcc package, which lacks nvvm/cicc (exit 127 mid-compile).
+%% Use CUDA_HOME if set, else the canonical merged toolkit (same default as
+%% bpd/lib/fact_dispatch.py). Falls back to PATH nvcc only if neither exists.
+nvcc_bin(Bin) :-
+    ( getenv('CUDA_HOME', H), H \= '',
+      format(atom(B0), '~w/bin/nvcc', [H]), exists_file(B0)
+    -> Bin = B0
+    ;  B1 = '/nix/store/3y4mvymhwmnfi5d0vwyzcw7f7sqnqnkd-cuda-merged-12.8/bin/nvcc',
+       exists_file(B1)
+    -> Bin = B1
+    ;  Bin = nvcc ).
+
 %% Temporary file naming
-tmp_dir('/tmp/l1_cuda_validation').
+%% per-user temp dir so multiple agents can run the harness concurrently (was a hardcoded shared
+%% '/tmp/l1_cuda_validation' owned by the first runner -> Permission denied for everyone else).
+tmp_dir(Dir) :-
+    ( getenv('USER', U), U \= '' -> true ; U = 'anon' ),
+    format(atom(Dir), '/tmp/l1_cuda_validation_~w', [U]).
 
 run_tests :-
     %% First check if nvcc is available
@@ -188,9 +244,11 @@ validate_one(Name, KernelAST, Outcome) :-
     close(S),
     %% Compile
     target_arch(Arch),
+    cuda_include_flag(IncFlag),
+    nvcc_bin(Nvcc),
     format(atom(NvccCmd),
-        'nvcc -arch=~w -c ~w -o ~w 2>&1',
-        [Arch, CuPath, ObjPath]),
+        '~w -arch=~w ~w -c ~w -o ~w 2>&1',
+        [Nvcc, Arch, IncFlag, CuPath, ObjPath]),
     %% Capture output
     setup_call_cleanup(
         process_create(path(sh), ['-c', NvccCmd],

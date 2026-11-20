@@ -41,7 +41,7 @@ memory access pattern, not guessed or hardcoded.
 %! valid_tile(-M_tile, -N_tile, -K_tile, +Platform) is nondet.
 %  Generate valid tile dimensions for Platform via backtracking.
 %  Each solution satisfies vectorization alignment and shared memory bounds.
-valid_tile(M_tile, N_tile, K_tile, Platform) :-
+valid_tile(M_tile, N_tile, K_tile, _Platform) :-
     %% Ensure dimensions are positive integers
     integer(M_tile), M_tile > 0,
     integer(N_tile), N_tile > 0,

@@ -179,6 +179,26 @@ def dequant_q6_k(path, offset, n_elements, shape):
     return torch.from_numpy((d[:, None] * sc[:, si] * quants).reshape(shape).astype(np.float32).copy())
 
 
+def dequant_q8_0(path, offset, n_elements, shape):
+    """Q8_0 block dequantization. Each block is 34 bytes for 32 elements:
+      bytes 0..1  : d (FP16 block scale)
+      bytes 2..33 : 32 int8 quants
+    Dequant: x[i] = d * qs[i]. (Verified against llama.cpp block_q8_0 in
+    ggml-common.h: sizeof == ggml_half + QK8_0. Iyun, 2026-06-08.)
+    """
+    QK = 32
+    BLOCK = 2 + QK            # 34 bytes
+    nb = n_elements // QK
+    with open(path, 'rb') as f:
+        f.seek(offset)
+        raw = np.frombuffer(f.read(nb * BLOCK), dtype=np.uint8)
+    bl = raw.reshape(nb, BLOCK)
+    d = np.frombuffer(bl[:, :2].tobytes(), dtype=np.float16).astype(np.float32).reshape(nb)
+    qs = bl[:, 2:].view(np.int8).astype(np.float32)        # (nb, 32)
+    values = (d[:, None] * qs).reshape(n_elements)
+    return torch.from_numpy(values.reshape(shape).astype(np.float32).copy())
+
+
 # ────────────────────────────────────────────────────────────────────
 # Tensor loading dispatcher (handles all GGUF types)
 # ────────────────────────────────────────────────────────────────────
@@ -191,6 +211,7 @@ TYPE_Q4_K = 12
 TYPE_Q2_K = 10
 TYPE_Q3_K = 11
 TYPE_Q6_K = 14
+TYPE_Q8_0 = 8
 
 
 def load_tensor_by_type(path, offset, n_elements, shape, type_code):
@@ -217,6 +238,8 @@ def load_tensor_by_type(path, offset, n_elements, shape, type_code):
         return dequant_q3_k(path, offset, n_elements, shape)
     elif type_code == TYPE_Q6_K:
         return dequant_q6_k(path, offset, n_elements, shape)
+    elif type_code == TYPE_Q8_0:
+        return dequant_q8_0(path, offset, n_elements, shape)
     else:
         print(f"  WARN: unknown type code {type_code}, using zeros")
         return torch.zeros(shape)
@@ -333,12 +356,25 @@ def extract_ollama_eval_stats(response_str):
 # Llama-family helpers (RMSNorm, RoPE, SwiGLU, GQA)
 # ────────────────────────────────────────────────────────────────────
 
+# ── fact-dispatch switch ─────────────────────────────────────────────────────
+# When BPD_FACT_DISPATCH=1, the compute ops delegate to fact_dispatch — kernels
+# emitted from Prolog op_expr facts and run on the GPU, instead of torch. The Prolog
+# runner (llamatov_llama.pl) is UNCHANGED; flip the flag for a fact-driven forward
+# pass (differential vs torch by toggling). (Iyun, 2026-06-08.)
+import os as _os
+_FACT = _os.environ.get("BPD_FACT_DISPATCH", "0") == "1"
+if _FACT:
+    import fact_dispatch as _fd
+
+
 def rms_norm(x, weight, eps=1e-5):
     """RMS normalization (Llama family).
 
     Per RMSNorm paper: y = x / sqrt(mean(x^2) + eps) * weight
     No bias term (Llama doesn't use biases).
     """
+    if _FACT:
+        return _fd.rms_norm_fact(x, weight, eps)
     variance = x.pow(2).mean(-1, keepdim=True)
     x_normed = x * torch.rsqrt(variance + eps)
     return x_normed * weight
@@ -346,6 +382,8 @@ def rms_norm(x, weight, eps=1e-5):
 
 def linear_no_bias(x, weight):
     """Linear without bias: y = x @ weight (Llama-style)."""
+    if _FACT:
+        return _fd.linear_fact(x, weight)
     return x @ weight
 
 
@@ -435,6 +473,8 @@ def llama_causal_attention(q, k, v, n_heads, n_heads_kv):
 
     Output: [batch, n_heads, tokens, head_dim]
     """
+    if _FACT:
+        return _fd.attention_fact(q, k, v, n_heads, n_heads_kv)
     head_dim = q.shape[-1]
     T = q.shape[-2]
     k_exp, v_exp = expand_kv_for_gqa(k, v, n_heads, n_heads_kv)
@@ -450,6 +490,8 @@ def swiglu_ffn(x, gate_w, up_w, down_w):
 
     All linears are no-bias.
     """
+    if _FACT:
+        return _fd.swiglu_fact(x, gate_w, up_w, down_w)
     gate = x @ gate_w
     up = x @ up_w
     inner = F.silu(gate) * up

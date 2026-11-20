@@ -1,0 +1,49 @@
+{
+  "label": "post-flash-attention-rope-triply-confirmed",
+  "ours_fixture": "/tmp/mavhir_l1_paired/bpd_dump_final",
+  "ref_fixture": "/tmp/mavhir_l1_paired/fattn_dump_canonical",
+  "per_pattern_result": {
+    "Qcur-": {
+      "n_layers": 16,
+      "all_layers_bit_identical": true,
+      "max_abs_diff_overall": 0.0,
+      "max_ulp_overall": 0
+    },
+    "Kcur-": {
+      "n_layers": 16,
+      "all_layers_bit_identical": true,
+      "max_abs_diff_overall": 0.0,
+      "max_ulp_overall": 0
+    },
+    "Vcur-": {
+      "n_layers": 16,
+      "all_layers_bit_identical": true,
+      "max_abs_diff_overall": 0.0,
+      "max_ulp_overall": 0
+    },
+    "__fattn__-": {
+      "n_layers": 16,
+      "all_layers_bit_identical": true,
+      "max_abs_diff_overall": 0.0,
+      "max_ulp_overall": 0
+    }
+  },
+  "final_tail": [
+    {
+      "name": "result_norm",
+      "bit_identical": 2048,
+      "n_elements": 2048,
+      "max_ulp": 0,
+      "max_abs_diff": 0.0
+    },
+    {
+      "name": "result_output",
+      "bit_identical": 128256,
+      "n_elements": 128256,
+      "max_ulp": 0,
+      "max_abs_diff": 0.0
+    }
+  ],
+  "FLAT_0_ACHIEVED": true,
+  "verdict": "FLAT-0 ACHIEVED: every layer's Qcur/Kcur/Vcur/__fattn__ AND final tail bit-identical vs reference"
+}

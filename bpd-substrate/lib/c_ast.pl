@@ -207,7 +207,18 @@ emit_type(c_type(auto)) --> "auto".
 %% ─── Expressions ───
 
 emit_expr(c_int(V)) --> emit_number(V).
-emit_expr(c_float(V)) --> emit_float(V).
+%% c_float_lit(Value, Suffix) - canonical float literal node. Models a C float literal
+%% as value + optional suffix (none | f | l). Emits value via format_float_minimal
+%% (precision-preserving) + suffix char. c_float/c_float_f are aliases. No raw text.
+emit_expr(c_float_lit(V, Suffix)) --> emit_float(V), float_suffix_chars(Suffix).
+float_suffix_chars(none) --> [].
+float_suffix_chars('') --> [].
+float_suffix_chars(f) --> "f".
+float_suffix_chars('F') --> "F".
+float_suffix_chars(l) --> "l".
+float_suffix_chars('L') --> "L".
+emit_expr(c_float(V)) --> emit_expr(c_float_lit(V, none)).
+emit_expr(c_float_f(V)) --> emit_expr(c_float_lit(V, f)).
 emit_expr(c_string(V)) --> "\"", emit_atom(V), "\"".
 emit_expr(c_var(Name)) --> emit_atom(Name).
 emit_expr(c_nullptr) --> "nullptr".
@@ -249,10 +260,31 @@ emit_expr(c_call(Func, Args)) -->
 emit_expr(c_cast(Type, Expr)) -->
     "(", emit_type(Type), ")", emit_expr(Expr).
 
+%% Binop: parenthesize operands that are THEMSELVES compound expressions
+%% (binop/ternary/cast), so precedence is preserved. Without this,
+%% c_binop(/, c_binop(+, n, 255), 256) emitted "n + 255 / 256" (= n + 0)
+%% instead of "(n + 255) / 256". Simple operands (vars, ints, calls,
+%% already-parenthesized) pass through unwrapped — preserving the
+%% upstream minimal-paren convention.
 emit_expr(c_binop(Op, L, R)) -->
-    emit_expr(L), " ", emit_atom(Op), " ", emit_expr(R).
+    emit_binop_operand(L), " ", emit_atom(Op), " ", emit_binop_operand(R).
 emit_expr(c_unop(Op, E)) -->
-    emit_atom(Op), emit_expr(E).
+    emit_atom(Op), emit_binop_operand(E).
+
+%% emit_binop_operand: wrap compound operands in parens; pass simple ones through.
+emit_binop_operand(c_binop(Op, L, R)) -->
+    "(", emit_expr(c_binop(Op, L, R)), ")".
+emit_binop_operand(c_ternary(C, T, E)) -->
+    "(", emit_expr(c_ternary(C, T, E)), ")".
+emit_binop_operand(c_cast(Ty, E)) -->
+    "(", emit_expr(c_cast(Ty, E)), ")".
+emit_binop_operand(E) -->
+    { \+ compound_binop_operand(E) },
+    emit_expr(E).
+
+compound_binop_operand(c_binop(_, _, _)).
+compound_binop_operand(c_ternary(_, _, _)).
+compound_binop_operand(c_cast(_, _)).
 
 emit_expr(c_sizeof(E)) -->
     "sizeof(", emit_expr(E), ")".
@@ -1033,16 +1065,23 @@ parse_atom_expr(c_pre_inc(E)) --> [punct('++')], parse_chain(E).
 parse_atom_expr(c_pre_dec(E)) --> [punct('--')], parse_chain(E).
 %% Unary not: !x. Matches the emit-side c_not shape.
 parse_atom_expr(c_not(E)) --> [punct('!')], parse_chain(E).
+%% Unary sign prefix: -x and +x, handled EQUALLY (Iyun 2026-05-29, Heath request).
+%% At the atom layer feeding parse_chain, so it composes in binop RHS too (a + -1).
+%% Emit side already handles c_unop(Op,E) (emit_expr/254), so this completes round-trip.
+%% Distinct from BINARY minus (a - b), which is parse_binop_rest with a left operand;
+%% here there is no left operand -> unary.
+parse_atom_expr(c_unop('-', E)) --> [punct('-')], parse_chain(E).
+parse_atom_expr(c_unop('+', E)) --> [punct('+')], parse_chain(E).
 parse_atom_expr(c_int(N)) --> [num(N)].
 %% Float literal: dispatches to c_float_f for f-suffix forms,
 %% c_float for unsuffixed, c_float_suffix for other suffix chars.
 %% Same AST shape that the existing emit rules produce in the inverse
 %% direction (Satya: same vocabulary both ways).
-%% Float parse rules produce c_float_raw(Raw) which carries the
+%% Float parse rules produce c_float_lit(V, Suffix) modeling the value + suffix.
 %% source's exact textual representation. The emit side renders it
 %% verbatim. This preserves scientific notation, precision, and
 %% suffix forms for round-trip.
-parse_atom_expr(c_float_raw(Raw)) --> [floatnum(_V, _Suffix, Raw)].
+parse_atom_expr(c_float_lit(V, Suffix)) --> [floatnum(V, Suffix, _Raw)].
 parse_atom_expr(c_string(S)) --> [str(S)].
 parse_atom_expr(c_var(Name)) --> [id(Name)].
 %% C cast expression: (TypeName) expr — placed before c_paren so
@@ -1270,8 +1309,10 @@ parse_case_body([S | Rest]) -->
     parse_stmt_v2(S), parse_case_body(Rest).
 parse_case_body([]) --> [].
 
+parse_stmts_v2([S|Ss]) --> parse_stmt_v2(S), !, parse_stmts_v2(Ss).
 parse_stmts_v2([]) --> [].
-parse_stmts_v2([S|Ss]) --> parse_stmt_v2(S), parse_stmts_v2(Ss).
+
+
 
 c_parse_stmts_v2(String, ASTs) :-
     c_tokenize(String, Tokens),
@@ -1455,10 +1496,6 @@ emit_stmt(c_return_void, Indent) -->
     emit_indent(Indent), "return;\n".
 
 %% Float with fewer decimals
-emit_expr(c_floatf(V)) -->
-    { format(atom(A), "~1f", [V]), atom_codes(A, Cs) }, Cs.
-emit_expr(c_float_suffix(V, Suffix)) -->
-    { format(atom(A), "~1f~w", [V, Suffix]), atom_codes(A, Cs) }, Cs.
 
 %% ═══════════════════════════════════════════════════════════════
 %% CUDA-specific AST nodes for kernel generation
@@ -1597,16 +1634,10 @@ emit_type(c_type(const_restrict_ptr(Base))) --> "const ", emit_type(Base), " * _
 %% Float literal with 'f' suffix
 %% Float with f-suffix: render with minimal trailing zeros to match
 %% upstream's convention (8.0f, not 8.000000f).
-emit_expr(c_float_f(V)) -->
-    { format_float_minimal(V, S),
-      format(atom(A), "~wf", [S]),
-      atom_codes(A, Cs) }, Cs.
 
-%% c_float_raw: render the captured original source text verbatim.
+%% (c_float_raw removed: float literals are modeled as c_float_lit(V,Suffix).)
 %% Used by parse-side floats to preserve scientific notation and
 %% exact precision for round-trip.
-emit_expr(c_float_raw(Raw)) -->
-    { atom_codes(Raw, Cs) }, Cs.
 
 %% c_raw is DEAD. The substrate is 100% semantic.
 %%

@@ -1,0 +1,59 @@
+{
+  "args": {
+    "ours_fixture_dir": "/tmp/mavhir_l1_paired/bpd_dump_final",
+    "ref_fixture_dir": "/tmp/mavhir_l1_paired/fattn_dump_canonical",
+    "layer_name_pattern": "l_out-",
+    "final_tail_names": [
+      "result_norm",
+      "result_output"
+    ],
+    "abs_tol": 1e-05,
+    "baseline": null,
+    "label": "post-flash-attention-rope",
+    "out": "/tmp/l1_curve_result.json"
+  },
+  "per_layer": [],
+  "final_tail": [
+    {
+      "tensor_name": "result_norm",
+      "n_elements": 2048,
+      "shape": [
+        2048
+      ],
+      "bit_identical": 2048,
+      "pass_abs_tolerance": 0,
+      "fail": 0,
+      "max_ulp": 0,
+      "median_ulp": 0,
+      "max_abs_diff": 0.0,
+      "median_abs_diff": 0.0,
+      "mean_abs_diff": 0.0
+    },
+    {
+      "tensor_name": "result_output",
+      "n_elements": 128256,
+      "shape": [
+        128256
+      ],
+      "bit_identical": 128256,
+      "pass_abs_tolerance": 0,
+      "fail": 0,
+      "max_ulp": 0,
+      "median_ulp": 0,
+      "max_abs_diff": 0.0,
+      "median_abs_diff": 0.0,
+      "mean_abs_diff": 0.0
+    }
+  ],
+  "summary": {
+    "n_valid_layers": 0,
+    "n_final_tail": 2,
+    "max_abs_diff_per_layer": [],
+    "max_ulp_per_layer": [],
+    "layer_with_max_abs_diff": -1,
+    "max_abs_diff_overall": 0.0,
+    "max_ulp_overall": 0,
+    "all_layers_bit_identical": true,
+    "all_final_tail_bit_identical": true
+  }
+}

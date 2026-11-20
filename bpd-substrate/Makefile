@@ -96,7 +96,7 @@ NVCC_FLAGS = -arch=$(NVCC_ARCH) -O2 -shared -Xcompiler -fPIC $(CUDA_HOME_FLAGS) 
 
 CPU_FP_strict = -O2
 CPU_FP_fma    = -O2 -mfma -ffp-contract=on
-CPU_FP_native = -O2 -march=native
+CPU_FP_native = -O2 -march=native -ffp-contract=off
 # mkl: AVX2+FMA, BPD_MKL_PATH=1 enables SVML-polynomial transcendentals and
 # AVX2 GEMV/affine-apply paths that match Intel MKL's PyTorch backend.
 CPU_FP_mkl    = -O2 -mavx2 -mfma -ffp-contract=on -DBPD_MKL_PATH=1

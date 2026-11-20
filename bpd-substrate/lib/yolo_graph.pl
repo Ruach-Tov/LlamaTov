@@ -1,5 +1,7 @@
+%% warning-free consult (canary audibility):
+:- discontiguous op_attr/3, op_inputs/2, op_output/2.
 %% YOLOv5n compute graph - auto-generated from trained model
-n:- discontiguous op_kind/2, op_output/2, op_inputs/2, op_attr/3.
+:- discontiguous op_kind/2, op_output/2, op_inputs/2, op_attr/3.
 % 199 ops total
 
 op_kind(l0_conv, conv2d).

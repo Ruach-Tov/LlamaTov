@@ -17,6 +17,9 @@
     demonstrate_chains/0
 ]).
 
+:- catch(use_module(veto_ledger), _, true).  % profitability citation (rec E)
+:- discontiguous classify_op/2.
+
 %% ═══════════════════════════════════════
 %% Operation classification
 %% ═══════════════════════════════════════
@@ -143,6 +146,29 @@ generate_fused_chain([Op|Rest], fused(Op, RestExpr)) :-
 %% Demonstrate with real L2 chains
 %% ═══════════════════════════════════════
 
+
+%% cite_chain(+Chain): print the PROFITABILITY citation for a chain (validity != profitability, rec E).
+%% Matmul/conv + elementwise epilogue is the always-profitable canonical case; anything matching a
+%% known anti-fusion pattern is flagged DO-NOT-WIRE; else UNKNOWN (honest absence). The scanner reports
+%% what CAN be fused; this says what SHOULD be — so a reader never wires a known 0.55x loser.
+cite_chain(Chain) :-
+    ( chain_pattern(Chain, Pat), catch(veto_ledger:cite(Pat, C), _, fail)
+    -> format("  Profitability: ~w~n", [C])
+    ;  format("  Profitability: UNKNOWN (validity only) — MEASURE before wiring~n", []) ).
+
+%% chain_pattern(+Chain, -LedgerPattern): map an op chain to a veto-ledger pattern.
+chain_pattern(Chain, epilogue_matmul_elementwise) :-
+    Chain = [Head|Rest], member(Head, [gemm, matmul, conv2d]),
+    forall(member(Op, Rest), elementwise_epilogue_op(Op)), !.
+chain_pattern(Chain, store_side_silu) :-       % a known anti-fusion shape (silu feeding a store/requant)
+    append(_, [silu, store|_], Chain), !.
+chain_pattern(Chain, reciprocal_mul_softmax) :-
+    member(softmax, Chain), member(scale, Chain), !.
+chain_pattern(_, unknown_pattern).
+
+elementwise_epilogue_op(Op) :- member(Op, [bias_add, add, relu, swish, silu, silu_mul, scale, tanh, gelu, hardtanh, mish, sigmoid, clamp]).
+
+
 demonstrate_chains :-
     format("═══ AUTO-FUSER: L2 CHAIN ANALYSIS ═══~n~n"),
 
@@ -152,6 +178,7 @@ demonstrate_chains :-
     format("L2 #76  Gemm+Add+ReLU:~n"),
     format("  Chain: ~w~n", [Chain1]),
     format("  Plan:  ~w~n", [Plan1]),
+    cite_chain(Chain1),
     format("  → 1 kernel (gemm with add+relu epilogue), pipeline depth 3~n~n"),
 
     %% L2 #59: Matmul + Swish + Scaling
@@ -160,6 +187,7 @@ demonstrate_chains :-
     format("L2 #59  Matmul+Swish+Scaling:~n"),
     format("  Chain: ~w~n", [Chain2]),
     format("  Plan:  ~w~n", [Plan2]),
+    cite_chain(Chain2),
     format("  → 1 kernel (matmul with swish+scale epilogue)~n~n"),
 
     %% L2 #33: Gemm + Scale + BatchNorm
@@ -168,6 +196,7 @@ demonstrate_chains :-
     format("L2 #33  Gemm+Scale+BatchNorm:~n"),
     format("  Chain: ~w~n", [Chain3]),
     format("  Plan:  ~w~n", [Plan3]),
+    cite_chain(Chain3),
     format("  → 2 kernels (gemm+scale, then batchnorm). Reduction forces split.~n~n"),
 
     %% L2 #84: Gemm + BatchNorm + Scaling + Softmax
@@ -176,6 +205,7 @@ demonstrate_chains :-
     format("L2 #84  Gemm+BatchNorm+Scaling+Softmax:~n"),
     format("  Chain: ~w~n", [Chain4]),
     format("  Plan:  ~w~n", [Plan4]),
+    cite_chain(Chain4),
     format("  → 3 kernels. Two reductions force two splits.~n~n"),
 
     %% L2 #37: Matmul + Swish + Sum + GroupNorm
@@ -184,6 +214,7 @@ demonstrate_chains :-
     format("L2 #37  Matmul+Swish+Sum+GroupNorm:~n"),
     format("  Chain: ~w~n", [Chain5]),
     format("  Plan:  ~w~n", [Plan5]),
+    cite_chain(Chain5),
     format("  → 3 kernels. Matmul+swish fused, then sum, then groupnorm.~n~n"),
 
     %% L2 #4: Conv2d + Mish + Mish (pure elementwise after spatial)
@@ -192,6 +223,7 @@ demonstrate_chains :-
     format("L2 #4   Conv2d+Mish+Mish:~n"),
     format("  Chain: ~w~n", [Chain6]),
     format("  Plan:  ~w~n", [Plan6]),
+    cite_chain(Chain6),
     format("  → 1 kernel (conv2d with mish+mish epilogue). ALL FUSED.~n~n"),
 
     %% L2 #95: Matmul+Add+Swish+Tanh+GELU+Hardtanh (6-deep elementwise)
@@ -200,6 +232,7 @@ demonstrate_chains :-
     format("L2 #95  Matmul+Add+Swish+Tanh+GELU+Hardtanh:~n"),
     format("  Chain: ~w~n", [Chain7]),
     format("  Plan:  ~w~n", [Plan7]),
+    cite_chain(Chain7),
     format("  → 1 kernel! 5 elementwise ops fuse into matmul epilogue.~n"),
     format("    Pipeline depth unchanged at 3 (epilogue is free).~n~n"),
 
@@ -250,3 +283,14 @@ classify_op(ggml_tanh, elementwise).
 classify_op(ggml_mish, elementwise).
 classify_op(ggml_softmax, reduction).
 classify_op(softmax, reduction).
+
+%% Engine-name aliases (production kernel vocabulary — name-drift fix, Bocher 2026-06-13).
+%% The engine spells these rms_norm / silu_mul / q8_gemv; the scanner previously only
+%% knew rmsnorm/silu/gemm. Aliases keep the scanner usable on real decode-graph op lists.
+classify_op(rms_norm, reduction).
+classify_op(silu_mul, elementwise).
+classify_op(q8_gemv, spatial).
+classify_op(q8_0_gemv, spatial).
+classify_op(quant_q8, elementwise).
+classify_op(rope, elementwise).
+classify_op(argmax, reduction).

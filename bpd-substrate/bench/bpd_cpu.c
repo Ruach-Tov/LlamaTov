@@ -34,6 +34,18 @@ static inline void* bpd_calloc(size_t count, size_t size) {
 #define BPD_HAVE_AVX1 0
 #endif
 
+// SSE2 intrinsics — baseline on the x86-64 ABI, but the header include is
+// still conditional on __SSE2__ for portability to non-x86 targets.
+// <immintrin.h> is only pulled in when __AVX__ is defined; the softmax
+// bit-identity multi-dispatch mirror's SSE2 path (bpd_ggml_expf_sse2 /
+// bpd_ggml_soft_max_f32_sse2) needs __m128 intrinsics even on builds
+// with AVX disabled (this repo's actual shipped ggml build: GGML_AVX2=OFF,
+// GGML_AVX=OFF, confirmed via CMakeCache.txt + disassembly).
+#if defined(__SSE2__) && !defined(__AVX__)
+#include <emmintrin.h>  // SSE2: __m128, _mm_set1_ps, _mm_loadu_ps, etc.
+#include <xmmintrin.h>  // SSE: _mm_shuffle_ps, _mm_movehl_ps, etc.
+#endif
+
 // CPU matmul: C[M,N] = A[M,K] @ B[K,N]
 //
 // Implements Goto's blocked GEMM algorithm matching OpenBLAS Sandybridge SGEMM
@@ -1250,18 +1262,21 @@ void bpd_mm_bias_relu_cpu(const float* A, const float* B,
 
 // CPU relu
 void bpd_relu_cpu(const float* input, float* output, int n) {
+    /* relu = x>=0 ? x : 0.  Uses >= so signed zero is preserved: torch relu(-0.0)=-0.0.
+     * fmaxf/_mm256_max_ps(0,x) would flip -0.0 -> +0.0 (a 0-ULP-class signed-zero bug). */
 #if BPD_HAVE_AVX1
     const __m256 zero = _mm256_setzero_ps();
     int i = 0;
     for (; i + 7 < n; i += 8) {
         __m256 x = _mm256_loadu_ps(input + i);
-        _mm256_storeu_ps(output + i, _mm256_max_ps(zero, x));
+        __m256 ge = _mm256_cmp_ps(x, zero, _CMP_GE_OQ);
+        _mm256_storeu_ps(output + i, _mm256_blendv_ps(zero, x, ge));
     }
     for (; i < n; i++)
-        output[i] = fmaxf(0.0f, input[i]);
+        output[i] = input[i] >= 0.0f ? input[i] : 0.0f;
 #else
     for (int i = 0; i < n; i++)
-        output[i] = fmaxf(0.0f, input[i]);
+        output[i] = input[i] >= 0.0f ? input[i] : 0.0f;
 #endif
 }
 
@@ -1273,6 +1288,16 @@ void bpd_silu_cpu(const float* input, float* output, int n) {
     for (int i = 0; i < n; i++) {
         float x = input[i];
         output[i] = x / (1.0f + expf(-x));
+    }
+}
+
+// CPU swish (Stanford 25_Swish = x*sigmoid, reciprocal-mul form). Distinct from silu
+// (divide form): the two differ by 1 ULP. Stanford forward pins reciprocal_mul.
+void bpd_swish_cpu(const float* input, float* output, int n) {
+    for (int i = 0; i < n; i++) {
+        float x = input[i];
+        float s = 1.0f / (1.0f + expf(-x));
+        output[i] = x * s;
     }
 }
 
@@ -2618,7 +2643,7 @@ void bpd_leaky_relu_cpu(const float* input, float* output, int n) {
 void bpd_elu_cpu(const float* input, float* output, int n) {
     for (int i = 0; i < n; i++) {
         float a = input[i];
-        output[i] = a < 0.0f ? expm1f(a) : a;
+        output[i] = a <= 0.0f ? (expf(a) - 1.0f) : a;
     }
 }
 
@@ -2635,7 +2660,7 @@ void bpd_selu_cpu(const float* input, float* output, int n) {
     const float negiptcoef = 1.0f;  // input_scale default
     for (int i = 0; i < n; i++) {
         float a = input[i];
-        output[i] = a < 0.0f ? expm1f(a * negiptcoef) * negcoef : a * poscoef;
+        output[i] = a <= 0.0f ? (expf(a * negiptcoef) - 1.0f) * negcoef : a * poscoef;
     }
 }
 
@@ -3926,35 +3951,10 @@ void bpd_mul_broadcast_cpu(const float* a, const float* b, float* out,
  * happened to be subnormal F16.
  */
 static inline float f16_to_f32(uint16_t h) {
-    const uint32_t w = (uint32_t)h << 16;
-    const uint32_t sign = w & 0x80000000u;
-    const uint32_t two_w = w + w;
-    /* exp_offset = 0xE0 << 23 = 0x70000000 */
-    const uint32_t exp_offset = 0x70000000u;
-    /* exp_scale = 0x1.0p-112f = 2^-112, bits = (127-112) << 23 = 0x07800000 */
-    const uint32_t exp_scale_bits = 0x07800000u;
-    float exp_scale;
-    memcpy(&exp_scale, &exp_scale_bits, sizeof(float));
-    uint32_t norm_bits = (two_w >> 4) + exp_offset;
-    float normalized_value;
-    memcpy(&normalized_value, &norm_bits, sizeof(float));
-    normalized_value *= exp_scale;
-    /* magic_mask = 126 << 23 = 0x3F000000, magic_bias = 0.5f */
-    const uint32_t magic_mask = 0x3F000000u;
-    const float magic_bias = 0.5f;
-    uint32_t denorm_bits = (two_w >> 17) | magic_mask;
-    float denormalized_value;
-    memcpy(&denormalized_value, &denorm_bits, sizeof(float));
-    denormalized_value -= magic_bias;
-    /* denormalized_cutoff = 1 << 27 = 0x08000000 */
-    const uint32_t denormalized_cutoff = 0x08000000u;
-    float selected = (two_w < denormalized_cutoff) ? denormalized_value : normalized_value;
-    uint32_t selected_bits;
-    memcpy(&selected_bits, &selected, sizeof(float));
-    const uint32_t result_bits = sign | selected_bits;
-    float result;
-    memcpy(&result, &result_bits, sizeof(float));
-    return result;
+    // F16C hardware conversion (single vcvtph2ps, NO branch). Bit-identical to the
+    // magic-bias version across all 65536 values (verified). Eliminates the denormal-cutoff
+    // branch that caused 3.02 branch-miss/dot in bpd_qdot.
+    return _cvtsh_ss(h);
 }
 
 void bpd_dequant_q8_0_cpu(const uint8_t* raw, float* out, int n_blocks) {
@@ -4104,33 +4104,61 @@ static inline uint16_t f32_to_f16(float f) {
 }
 
 void bpd_quant_q8_0_cpu(const float* x, uint8_t* y, int n_elements) {
+    // Doresh's #11 whole-model-drift catch (Sept 2026): the PREVIOUS
+    // version of this function mirrored ggml's AVX-INTRINSIC
+    // quantize_row_q8_0 (quants.c's #if defined(__AVX2__)||defined(__AVX__)
+    // branch: id=127.f/maxScalar computed DIRECTLY, then rintf
+    // round-to-nearest-even) -- but the ACTUALLY LINKED/CALLED symbol in
+    // the real built libggml-cpu.so is NOT that AVX path at all: `nm -D`
+    // + objdump show `quantize_row_q8_0` is a bare `jmp
+    // quantize_row_q8_0_ref` (ggml-quants.c's SCALAR reference
+    // implementation) -- ggml's real dispatch table (see
+    // ggml-cpu.c:263's `.from_float = quantize_row_q8_0`) routes through
+    // this ref implementation for our build config, not the vectorized
+    // one. The ref implementation differs in TWO ways that matter at
+    // exact rounding boundaries: (1) `d = amax/127` is computed FIRST
+    // (rounds to float32), THEN `id = 1.0f/d` -- a SEPARATE division,
+    // NOT the same value as `127.f/maxScalar` computed directly (division
+    // isn't distributive at float32 precision -- these can differ in the
+    // last bit); (2) uses `roundf` (round-half-AWAY-FROM-ZERO), NOT
+    // `rintf` (round-half-to-EVEN) -- a genuinely different rounding MODE,
+    // not just a different code path to the same answer.
+    //
+    // Verified precisely via a real fixture value that sits exactly on a
+    // rounding boundary (x0=22.5 at attn_norm-0 row0 block19 elem23):
+    // real ggml's quantize_row_q8_0 (confirmed via dlsym + disassembly)
+    // gives qs=23; the OLD id=127/maxScalar + rintf path gives qs=22 (a
+    // real, reproducible, byte-level divergence). Switched to
+    // amax/127-then-1/d and roundf here; also renamed maxScalar/amax
+    // naming to match ggml's ref implementation's own variable name for
+    // clarity when comparing side-by-side in the future.
     int nb = n_elements / 32;
     for (int i = 0; i < nb; i++) {
         const float* x_block = x + i * 32;
         uint8_t* y_block = y + i * 34;
-        // Find maxScalar (positive absolute max). ggml's AVX1 path computes
-        // this via a SIMD reduction; for correctness we use a scalar loop
-        // which produces the same maxScalar.
-        float maxScalar = 0.0f;
+        float amax = 0.0f;
         for (int j = 0; j < 32; j++) {
             float v = x_block[j];
             float av = v < 0 ? -v : v;
-            if (av > maxScalar) maxScalar = av;
+            if (av > amax) amax = av;
         }
-        // Stored scale: d = maxScalar / 127
-        float d = maxScalar / 127.f;
+        // d = amax/127 computed FIRST (rounds to f32), id = 1/d computed
+        // SEPARATELY -- matches quantize_row_q8_0_ref exactly (NOT
+        // id=127/amax computed directly, which can differ in the last
+        // bit at some inputs due to float32 division non-distributivity).
+        const float d = amax / ((1 << 7) - 1);
+        const float id = d ? 1.0f / d : 0.0f;
         uint16_t d_f16 = f32_to_f16(d);
         y_block[0] = (uint8_t)(d_f16 & 0xff);
         y_block[1] = (uint8_t)(d_f16 >> 8);
-        // Quantization multiplier: id = 127 / maxScalar (NOT 1/d \u2014 see comment above)
-        float id = (maxScalar != 0.0f) ? 127.f / maxScalar : 0.0f;
-        // Quantize with round-half-to-even (matches _mm256_round_ps(_MM_ROUND_NEAREST))
         int8_t* qs = (int8_t*)(y_block + 2);
         for (int j = 0; j < 32; j++) {
-            float x0 = x_block[j] * id;
-            // rintf: round to nearest, ties to EVEN (banker's rounding).
-            // Matches the SSE/AVX _MM_ROUND_NEAREST rounding mode.
-            qs[j] = (int8_t)rintf(x0);
+            const float x0 = x_block[j] * id;
+            // roundf: round to nearest, ties AWAY FROM ZERO -- matches
+            // quantize_row_q8_0_ref's real `y[i].qs[j] = roundf(x0);`
+            // (NOT rintf/round-to-even, which is a DIFFERENT rounding
+            // mode entirely, not just a different implementation path).
+            qs[j] = (int8_t)roundf(x0);
         }
     }
 }
@@ -4437,9 +4465,17 @@ void bpd_qmatmul_q8_0_llamafile_cpu(
     int k = K / 32;
     int bytes_per_row = k * 34;
 
-    // Quantize activations to Q8_0
-    uint8_t* X_q8_0 = (uint8_t*)malloc((size_t)m_tokens * bytes_per_row);
-    if (!X_q8_0) return;
+    // Quantize activations to Q8_0. Use a PERSISTENT thread-local scratch (no malloc/free
+    // churn per call — the dominant per-matmul overhead). Grows monotonically; never freed.
+    static __thread uint8_t* X_q8_0 = NULL;
+    static __thread size_t X_q8_0_cap = 0;
+    size_t need = (size_t)m_tokens * bytes_per_row;
+    if (need > X_q8_0_cap) {
+        free(X_q8_0);
+        X_q8_0 = (uint8_t*)malloc(need);
+        if (!X_q8_0) { X_q8_0_cap = 0; return; }
+        X_q8_0_cap = need;
+    }
     for (int i = 0; i < m_tokens; i++) {
         bpd_quant_q8_0_cpu(X_f32 + (size_t)i * K,
                            X_q8_0 + (size_t)i * bytes_per_row, K);
@@ -4447,8 +4483,7 @@ void bpd_qmatmul_q8_0_llamafile_cpu(
 
     // Call the dispatcher to handle tiling
     bpd_qmatmul_q8_0_dispatch_cpu(W_q8_0, X_q8_0, out, m_weight, m_tokens, K);
-
-    free(X_q8_0);
+    // (no free: persistent scratch reused across calls)
 }
 
 #else
@@ -4968,10 +5003,21 @@ void bpd_rmsnorm_llama_cpu(
         const float* x = input  + r * row_len;
         float*       y = output + r * row_len;
 
-        /* ggml uses double accumulation for the sum-of-squares */
+        /* ggml uses double accumulation for the sum-of-squares, but the
+         * SQUARE ITSELF is computed in float32 BEFORE the cast to double
+         * (ops.cpp: `sum += (ggml_float)(x[i00] * x[i00]);` -- x[i00]*x[i00]
+         * is a float*float multiply, THEN cast to double for the += ).
+         * This is NOT the same as promoting both operands to double first
+         * ((double)x[i] * (double)x[i]) -- the squaring itself loses
+         * precision to float32 rounding before ever reaching double,
+         * so the two accumulation orders can diverge by more than 1 ULP
+         * on inputs with meaningful magnitude (confirmed: e.g. x=12345.678f
+         * squared-in-f32-then-cast vs squared-in-f64 differ by several ULP
+         * in the final sum). Match ggml's exact order: square in float,
+         * THEN cast to double. */
         double sum = 0.0;
         for (int i = 0; i < row_len; i++) {
-            sum += (double)x[i] * (double)x[i];
+            sum += (double)(x[i] * x[i]);
         }
         const float mean  = (float)(sum / row_len);
         const float scale = 1.0f / sqrtf(mean + eps);
@@ -5143,6 +5189,7 @@ void bpd_rope_neox_freqs_cpu(
  *
  * Signature mirrors bpd_rope_neox_freqs_cpu but with the NORM rotation pattern.
  * \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500*/
+__attribute__((optimize("fp-contract=off")))
 void bpd_rope_norm_freqs_cpu(
         const float*   input,
         float*         output,
@@ -5154,6 +5201,21 @@ void bpd_rope_norm_freqs_cpu(
         int            n_dims,
         float          freq_base)
 {
+    /* FMA-contraction fix (2026-09-07, Doresh): the x0*cos-x1*sin /
+     * x0*sin+x1*cos rotation below matches real ggml's rope_yarn source
+     * exactly (ops.cpp: dst[0]=x0*cos_theta-x1*sin_theta etc.), but with
+     * -mfma the compiler was auto-contracting these into single-rounding
+     * FMA instructions (vfmsub231ss/vfmadd132ss, confirmed via
+     * disassembly), diverging from ggml's real two-step separately-rounded
+     * arithmetic by ~1 ULP -- found while investigating a small residual
+     * discrepancy in a paired-fixture delivery for the flash-attention
+     * work (isolated to post-RoPE Q/K specifically; pre-RoPE Q matched the
+     * reference exactly, conclusively pointing at RoPE's own arithmetic,
+     * not the upstream matmul). Third occurrence of this exact hazard
+     * class this session (matmul, flash-attention, now RoPE) -- any new
+     * precision-critical float multiply-add code in this file should get
+     * this attribute proactively, not just reactively after a gate catches
+     * it. */
     const float theta_scale = powf(freq_base, -2.0f / (float)n_dims);
 
     for (int t = 0; t < n_tokens; t++) {
@@ -5367,6 +5429,359 @@ void bpd_softmax_causal_cpu(
  * The previous online-softmax version (pre_scaled) is faster but produces
  * different bits due to different accumulation order.
  */
+static inline float bpd_hsum256_tb(__m256 x) {
+    __m128 lo = _mm256_castps256_ps128(x);
+    __m128 hi = _mm256_extractf128_ps(x, 1);
+    __m128 sm = _mm_add_ps(lo, hi);
+    __m128 sh = _mm_movehl_ps(sm, sm);
+    sm = _mm_add_ps(sm, sh);
+    sh = _mm_shuffle_ps(sm, sm, 0x1);
+    sm = _mm_add_ss(sm, sh);
+    return _mm_cvtss_f32(sm);
+}
+/* Doresh's flash-attention QK-dot fix (Sept 2026): the PREVIOUS version of
+ * this function (named bpd_qk_dot_tinyblas_f32k, claiming "matches ggml
+ * node_20 at 0 ULP; verified vs dump + disassembly @0x7c0b0") was WRONG --
+ * the claimed disassembly address 0x7c0b0 actually corresponds to
+ * ggml_compute_forward_dup_bytes in the real libggml-cpu.so, completely
+ * unrelated to attention (verified directly via objdump on the exact same
+ * binary used throughout this session -- not a stale-build issue, the
+ * original claim itself was in error, likely conflating a compute-graph
+ * node INDEX with a fixed code ADDRESS, which don't correspond 1:1).
+ *
+ * Real reference path (ggml_compute_forward_flash_attn_ext_f16_one_chunk,
+ * ops.cpp): Q gets converted to K's vec_dot_type (F16 for our model, K is
+ * stored F16 in the KV-cache) via q_to_vec_dot, then ggml_vec_dot_f16 does
+ * the actual dot product. Disassembled ggml_vec_dot_f16 in the real
+ * compiled binary: it is a bare SCALAR loop (NO SIMD at all -- GGML_SIMD
+ * is only defined inside architecture-specific blocks gated by real
+ * hardware-capability macros like __AVX2__/__SSE3__, none of which apply
+ * to our baseline build, confirmed both via source inspection AND by the
+ * disassembly showing zero vector instructions) that looks up F16->F32 via
+ * ggml_table_f32_f16, multiplies as scalar float, but critically
+ * ACCUMULATES IN DOUBLE PRECISION (cvtss2sd/addsd per term), converting
+ * back to float only at the very end (cvtsd2ss).
+ *
+ * The OLD bpd function instead used single-precision __m256 SIMD
+ * accumulation with F16C-hardware round-tripping -- a plausible-looking
+ * but DIFFERENT approach, not what the real reference does (this build
+ * doesn't even have F16C: GGML_F16C=OFF confirmed via CMakeCache).
+ * Verified via direct dlsym comparison against the real ggml_vec_dot_f16
+ * with random data: reproducible 1-ULP mismatch. This fix replaces the
+ * SIMD single-precision approach with the real scalar double-accumulated
+ * table-lookup algorithm, matching ggml_vec_dot_f16 exactly. */
+__attribute__((optimize("fp-contract=off")))
+static inline float bpd_qk_dot_f16_scalar(const float* q_f32, const float* k_f32, int n) {
+    double sumf = 0.0;
+    for (int l = 0; l < n; l++) {
+        float qf = _cvtsh_ss(_cvtss_sh(q_f32[l], 0));
+        float kf = _cvtsh_ss(_cvtss_sh(k_f32[l], 0));
+        sumf += (double)(qf * kf);
+    }
+    return (float)sumf;
+}
+
+/* COMPLETE scalar replica of ggml_v_expf (incl |n|>126 overflow branch). 0-ULP vs ggml.
+ * Handles masked scores (-1e38 -> 0) like ggml. FMA expanded to mul+add (no-FMA box). */
+static inline float bpd_exp_scalar_ggml(float x){
+    const float r = 0x1.8p23f;
+    const float z = x * 0x1.715476p+0f + r;
+    const float n = z - r;
+    const float b = (x - n * 0x1.62e4p-1f) - n * 0x1.7f7d1cp-20f;
+    uint32_t zi; __builtin_memcpy(&zi, &z, 4);
+    uint32_t e = (zi << 23);
+    uint32_t k_bits = e + 0x3f800000u;
+    float k; __builtin_memcpy(&k, &k_bits, 4);
+    float absn = n < 0.f ? -n : n;
+    const float u = b * b;
+    const float j = ((0x1.0e4020p-7f * b + 0x1.573e2ep-5f) * u
+                     + (0x1.555e66p-3f * b + 0x1.fffdb6p-2f)) * u + 0x1.ffffecp-1f * b;
+    if (!(absn > 126.f)) return j * k + k;
+    uint32_t g = (n <= 0.f ? 0x82000000u : 0u);
+    uint32_t s1b = g + 0x7f000000u; float s1; __builtin_memcpy(&s1, &s1b, 4);
+    uint32_t s2b = e - g;          float s2; __builtin_memcpy(&s2, &s2b, 4);
+    if (absn > 192.f) return s1 * s1;
+    return (s2 * j + s2) * s1;
+}
+
+/* ═══ MULTI-DISPATCH SOFTMAX MIRROR (Heath's full-scope (3) ruling, Sept
+ * 2026) — mirrors ggml's OWN #if-defined dispatch pattern (matching ANY
+ * build/arch ggml might be compiled for), consistent with how the
+ * substrate's Q8_0 matmul already handles multiple dispatches.
+ *
+ * bpd_exp_scalar_ggml above (the June 2026 fix, commit e61712dab) is the
+ * SCALAR fallback path — separately verified bit-identical vs ollama/ggml
+ * end-to-end (Llama-3.2-1B, maxULP=0) on Ivy Bridge AVX1, where ggml's
+ * real dispatch apparently also lands on a scalar-equivalent path. That
+ * result is genuine and stands for its own target.
+ *
+ * THIS enclave (Tesla P4, AVX2+FMA-capable hardware) runs a DIFFERENT
+ * ggml build (external/llama.cpp/build/bin/libggml-cpu.so, compiled with
+ * GGML_AVX2=OFF, GGML_AVX=OFF, GGML_FMA=OFF, GGML_NATIVE=OFF per its
+ * CMakeCache.txt) — on x86-64, __SSE2__ is baseline-always-defined
+ * regardless of those flags, so THIS binary's ggml_vec_soft_max_f32
+ * dispatches to the SSE2 4-wide path (confirmed via disassembly: xmm
+ * registers, shufps-based reduce, zero FMA instructions). The scalar
+ * fallback above does NOT bit-match THIS binary (measured: 0-190
+ * mismatches depending on KV length, growing with N) — a DIFFERENT real
+ * dispatch than Ivy Bridge's, not a contradiction of the June result.
+ *
+ * Below: the AVX2 (8-wide) and SSE2 (4-wide) paths, each independently
+ * verified bit-exact against their respective real targets (AVX2 vs a
+ * hand-copy of ggml's real AVX2 source; SSE2 vs the ACTUAL COMPILED
+ * libggml-cpu.so in this repo, using the real extracted bpd_cpu.c code,
+ * 20/20 test combos: KV∈{128,1024,2048,8192,16384} × 4 seeds). The
+ * dispatch function selects AVX2 if available at compile time, else
+ * SSE2, else the scalar fallback — matching ggml's own #if/#elif/#else
+ * chain, so the substrate follows whatever path ggml itself would for a
+ * given build configuration, rather than pinning to one arch. */
+
+#if defined(__AVX2__) && defined(__FMA__)
+/* ── ggml's exact AVX2 expf polynomial (vec.h ggml_v_expf, __AVX2__
+ * branch) ── Transcribed bit-for-bit from
+ * external/llama.cpp/ggml/src/ggml-cpu/vec.h (the __m256 ggml_v_expf(__m256 x)
+ * overload) — a DIFFERENT (wider) polynomial shape than the scalar/SSE2
+ * overloads, not simply "the same math at 8-wide." */
+static inline __m256 bpd_ggml_expf_avx2(__m256 x) {
+    const __m256 r = _mm256_set1_ps(0x1.8p23f);
+    const __m256 z = _mm256_fmadd_ps(x, _mm256_set1_ps(0x1.715476p+0f), r);
+    const __m256 n = _mm256_sub_ps(z, r);
+    const __m256 b = _mm256_fnmadd_ps(n, _mm256_set1_ps(0x1.7f7d1cp-20f),
+                                      _mm256_fnmadd_ps(n, _mm256_set1_ps(0x1.62e4p-1f), x));
+    const __m256i e = _mm256_slli_epi32(_mm256_castps_si256(z), 23);
+    const __m256 k = _mm256_castsi256_ps(
+        _mm256_add_epi32(e, _mm256_castps_si256(_mm256_set1_ps(1))));
+    const __m256i c = _mm256_castps_si256(
+        _mm256_cmp_ps(_mm256_andnot_ps(_mm256_set1_ps(-0.f), n),
+                      _mm256_set1_ps(126), _CMP_GT_OQ));
+    const __m256 u = _mm256_mul_ps(b, b);
+    const __m256 j = _mm256_fmadd_ps(_mm256_fmadd_ps(_mm256_fmadd_ps(_mm256_set1_ps(0x1.0e4020p-7f), b,
+                                                                     _mm256_set1_ps(0x1.573e2ep-5f)), u,
+                                                     _mm256_fmadd_ps(_mm256_set1_ps(0x1.555e66p-3f), b,
+                                                                     _mm256_set1_ps(0x1.fffdb6p-2f))),
+                                     u, _mm256_mul_ps(_mm256_set1_ps(0x1.ffffecp-1f), b));
+    if (!_mm256_movemask_ps(_mm256_castsi256_ps(c)))
+        return _mm256_fmadd_ps(j, k, k);
+    const __m256i g = _mm256_and_si256(
+        _mm256_castps_si256(_mm256_cmp_ps(n, _mm256_setzero_ps(), _CMP_LE_OQ)),
+        _mm256_set1_epi32(0x82000000u));
+    const __m256 s1 =
+        _mm256_castsi256_ps(_mm256_add_epi32(g, _mm256_set1_epi32(0x7f000000u)));
+    const __m256 s2 = _mm256_castsi256_ps(_mm256_sub_epi32(e, g));
+    const __m256i d = _mm256_castps_si256(
+        _mm256_cmp_ps(_mm256_andnot_ps(_mm256_set1_ps(-0.f), n),
+                      _mm256_set1_ps(192), _CMP_GT_OQ));
+    return _mm256_or_ps(
+        _mm256_and_ps(_mm256_castsi256_ps(d), _mm256_mul_ps(s1, s1)),
+        _mm256_andnot_ps(
+            _mm256_castsi256_ps(d),
+            _mm256_or_ps(
+                _mm256_and_ps(_mm256_castsi256_ps(c),
+                              _mm256_mul_ps(_mm256_fmadd_ps(s2, j, s2), s1)),
+                _mm256_andnot_ps(_mm256_castsi256_ps(c), _mm256_fmadd_ps(k, j, k)))));
+}
+
+/* ── ggml's exact AVX2 softmax accumulation (ggml_vec_soft_max_f32,
+ * __AVX2__ branch, vec.cpp ~557-567) ── 8-wide f32 exp, horizontal
+ * reduce in f32, single f32->f64 cast per group of 8, f64 accumulate
+ * group-sums. Verified bit-exact vs a hand-copy of ggml's real AVX2
+ * source (0 diffs, 15+ test combos). */
+static inline double bpd_ggml_soft_max_f32(int n, float* y, const float* x, float max_val) {
+    double sum = 0.0;
+    int i = 0;
+    const __m256 vmax = _mm256_set1_ps(max_val);
+    for (; i + 7 < n; i += 8) {
+        __m256 val = bpd_ggml_expf_avx2(_mm256_sub_ps(_mm256_loadu_ps(x + i), vmax));
+        _mm256_storeu_ps(y + i, val);
+        __m128 val2 = _mm_add_ps(_mm256_extractf128_ps(val, 1),
+                                 _mm256_castps256_ps128(val));
+        val2 = _mm_add_ps(val2, _mm_movehl_ps(val2, val2));
+        val2 = _mm_add_ss(val2, _mm_movehdup_ps(val2));
+        sum += (double)_mm_cvtss_f32(val2);
+    }
+    for (; i < n; i++) {
+        float e = bpd_exp_scalar_ggml(x[i] - max_val);
+        y[i] = e;
+        sum += (double)e;
+    }
+    return sum;
+}
+#endif /* __AVX2__ && __FMA__ */
+
+#if defined(__SSE2__)
+/* ── ggml's exact SSE2 expf polynomial (vec.h ggml_v_expf, __SSE2__
+ * branch, the __m128 overload) ── Transcribed bit-for-bit from
+ * external/llama.cpp/ggml/src/ggml-cpu/vec.h. This is the path THIS
+ * REPO'S ACTUAL COMPILED ggml (external/llama.cpp/build/bin/libggml-cpu.so)
+ * genuinely dispatches to at runtime — confirmed via CMakeCache.txt
+ * (GGML_AVX2=OFF, GGML_AVX=OFF, GGML_FMA=OFF, GGML_NATIVE=OFF) and via
+ * disassembly (xmm registers, shufps-based horizontal reduce, zero FMA
+ * instructions — matching the non-FMA MADD128/NMADD128 macro
+ * definitions below exactly). DIFFERENT magic constants and a
+ * DIFFERENT (narrower, 4-wide) polynomial shape than the AVX2 overload
+ * above — not simply "the same polynomial at half width." */
+#if defined(__FMA__)
+#define BPD_MADD128(x, y, z) _mm_fmadd_ps(x, y, z)
+#define BPD_NMADD128(x, y, z) _mm_fnmadd_ps(x, y, z)
+#else
+/* This repo's actual build (GGML_FMA=OFF) uses this branch — confirmed
+ * via disassembly: zero fmadd/fnmadd instructions in the compiled
+ * ggml_vec_soft_max_f32. */
+#define BPD_MADD128(x, y, z) _mm_add_ps(_mm_mul_ps(x, y), z)
+#define BPD_NMADD128(x, y, z) _mm_sub_ps(z, _mm_mul_ps(x, y))
+#endif
+
+static inline __m128 bpd_ggml_expf_sse2(__m128 x) {
+    const __m128 r = _mm_set1_ps(0x1.8p23f);
+    const __m128 z = BPD_MADD128(x, _mm_set1_ps(0x1.715476p+0f), r);
+    const __m128 n = _mm_sub_ps(z, r);
+    const __m128 b =
+        BPD_NMADD128(n, _mm_set1_ps(0x1.7f7d1cp-20f), BPD_NMADD128(n, _mm_set1_ps(0x1.62e4p-1f), x));
+    const __m128i e = _mm_slli_epi32(_mm_castps_si128(z), 23);
+    const __m128 k = _mm_castsi128_ps(_mm_add_epi32(e, _mm_castps_si128(_mm_set1_ps(1))));
+    const __m128i c =
+        _mm_castps_si128(_mm_cmpgt_ps(_mm_andnot_ps(_mm_set1_ps(-0.f), n), _mm_set1_ps(126)));
+    const __m128 u = _mm_mul_ps(b, b);
+    const __m128 j =
+        BPD_MADD128(BPD_MADD128(BPD_MADD128(_mm_set1_ps(0x1.0e4020p-7f), b, _mm_set1_ps(0x1.573e2ep-5f)), u,
+                        BPD_MADD128(_mm_set1_ps(0x1.555e66p-3f), b, _mm_set1_ps(0x1.fffdb6p-2f))),
+                u, _mm_mul_ps(_mm_set1_ps(0x1.ffffecp-1f), b));
+    if (!_mm_movemask_epi8(c))
+        return BPD_MADD128(j, k, k);
+    const __m128i g = _mm_and_si128(_mm_castps_si128(_mm_cmple_ps(n, _mm_setzero_ps())),
+                                    _mm_set1_epi32(0x82000000u));
+    const __m128 s1 = _mm_castsi128_ps(_mm_add_epi32(g, _mm_set1_epi32(0x7f000000u)));
+    const __m128 s2 = _mm_castsi128_ps(_mm_sub_epi32(e, g));
+    const __m128i d =
+        _mm_castps_si128(_mm_cmpgt_ps(_mm_andnot_ps(_mm_set1_ps(-0.f), n), _mm_set1_ps(192)));
+    return _mm_or_ps(
+        _mm_and_ps(_mm_castsi128_ps(d), _mm_mul_ps(s1, s1)),
+        _mm_andnot_ps(_mm_castsi128_ps(d),
+                      _mm_or_ps(_mm_and_ps(_mm_castsi128_ps(c), _mm_mul_ps(BPD_MADD128(s2, j, s2), s1)),
+                                _mm_andnot_ps(_mm_castsi128_ps(c), BPD_MADD128(k, j, k)))));
+}
+
+/* ── ggml's exact SSE2 softmax accumulation (ggml_vec_soft_max_f32,
+ * __SSE2__ branch, vec.cpp lines ~568-583) ── 4-wide f32 exp,
+ * horizontal-reduce-in-f32 (shuffle-based, matching the #else of the
+ * nested #if defined(__AVX__)||defined(__AVX2__)||defined(__AVX512F__)
+ * inside the SSE2 branch — confirmed via disassembly: shufps present,
+ * movehl/movehdup ABSENT, matching neither AVX/AVX2/AVX512F being
+ * defined for this build), single f32->f64 cast per group of 4, f64
+ * accumulate group-sums. Verified bit-exact against the REAL COMPILED
+ * libggml-cpu.so in this repo (20/20 test combos: KV∈{128,1024,2048,
+ * 8192,16384} × seeds∈{1,42,123,999}), using the ACTUAL extracted
+ * bpd_cpu.c code, not just a hand-copy. */
+static inline double bpd_ggml_soft_max_f32_sse2(int n, float* y, const float* x, float max_val) {
+    double sum = 0.0;
+    int i = 0;
+    const __m128 vmax = _mm_set1_ps(max_val);
+    for (; i + 3 < n; i += 4) {
+        __m128 val = bpd_ggml_expf_sse2(_mm_sub_ps(_mm_loadu_ps(x + i), vmax));
+        _mm_storeu_ps(y + i, val);
+#if defined(__AVX__) || defined(__AVX2__) || defined(__AVX512F__)
+        val = _mm_add_ps(val, _mm_movehl_ps(val, val));
+        val = _mm_add_ss(val, _mm_movehdup_ps(val));
+#else
+        /* This repo's actual build path (none of AVX/AVX2/AVX512F
+         * defined) — confirmed via disassembly (shufps, no
+         * movehl/movehdup). */
+        __m128 tmp = _mm_shuffle_ps(val, val, _MM_SHUFFLE(2, 3, 0, 1));
+        val = _mm_add_ps(val, tmp);
+        tmp = _mm_movehl_ps(tmp, val);
+        val = _mm_add_ss(val, tmp);
+#endif
+        sum += (double)_mm_cvtss_f32(val);
+    }
+    for (; i < n; i++) {
+        float e = bpd_exp_scalar_ggml(x[i] - max_val);
+        y[i] = e;
+        sum += (double)e;
+    }
+    return sum;
+}
+#endif /* __SSE2__ */
+
+/* ── Multi-dispatch entry point: mirrors ggml's OWN #if-defined
+ * dispatch pattern (Heath's full-scope (3) ruling) — select AVX2 if
+ * both AVX2 and FMA are available at compile time (matching ggml's
+ * #if defined(__AVX2__) && defined(__FMA__) gate exactly), else SSE2
+ * (this repo's actual verified target), else the scalar fallback
+ * (bpd_exp_scalar_ggml, the separately-verified June/Ivy-Bridge path).
+ * This makes the substrate select the SAME path ggml would for a
+ * given build configuration, rather than pinning to one arch's
+ * polynomial. */
+static inline double bpd_ggml_soft_max_dispatch(int n, float* y, const float* x, float max_val) {
+#if defined(__AVX2__) && defined(__FMA__)
+    return bpd_ggml_soft_max_f32(n, y, x, max_val);
+#elif defined(__SSE2__)
+    return bpd_ggml_soft_max_f32_sse2(n, y, x, max_val);
+#else
+    double sum = 0.0;
+    for (int i = 0; i < n; i++) {
+        float e = bpd_exp_scalar_ggml(x[i] - max_val);
+        y[i] = e;
+        sum += (double)e;
+    }
+    return sum;
+#endif
+}
+
+/* Doresh's online-softmax rewrite (Sept 2026, per Iyun's green-light and
+ * Heath's ruling to chase #11 to strict-0-ULP): replaces the previous
+ * three-phase structure (all-scores -> softmax -> weighted-sum, which
+ * mirrored a tinyBLAS f16 sgemm node that turned out to matter only for
+ * its ROUNDING SHAPE, not its actual dispatch) with the TRUE online/
+ * running-max softmax algorithm real ggml uses
+ * (ggml_compute_forward_flash_attn_ext_f16_one_chunk, confirmed as the
+ * real dispatch target for our shapes since neq1 [n_tokens] is always
+ * far below Q_TILE_SZ=64 -- see bpd/gate_workspace/flash_attention_scope/
+ * README.md for the full scope/derivation this rewrite follows exactly).
+ *
+ * KEY PRECISION DETAIL (verified empirically via dlsym against the real
+ * compiled ggml_cpu_fp32_to_fp16/ggml_cpu_fp16_to_fp32 before writing this,
+ * NOT just read from source -- 169/200 random trials diverged between
+ * per-step-F16-rounding and naive-F32-internal-accumulation): the
+ * V-accumulator is ROUNDED TO F16 ON EVERY SINGLE ACCUMULATION STEP
+ * (matching ggml_vec_mad_f16/ggml_vec_scale_f16's real scalar-tail
+ * formulas), NOT accumulated internally in F32/double. Each mad/scale:
+ * F16->F32 (lossless widening), arithmetic in F32, F32->F16 round-trip
+ * (via the SAME F16C hardware intrinsics bpd_qk_dot_f16_scalar already
+ * uses -- verified bit-identical to the table-lookup path ggml itself
+ * uses when GGML_F16C=OFF, across 100k random trials, so either
+ * implementation produces identical bits).
+ *
+ * v is passed here as an already-widened F32 array (v_cache_f32, from the
+ * caller's F16->F32 KV-cache dequantize pass) -- this is SAFE despite the
+ * per-step-F16-rounding requirement above, because F16->F32 is lossless:
+ * F32_to_F16(F16_to_F32(x)) == x always, so re-rounding v back to F16
+ * inside the mad step recovers the exact original F16 bit pattern with no
+ * extra precision loss, regardless of the intermediate F32 widening. */
+static inline uint16_t bpd_f32_to_f16_bits(float x) { return (uint16_t)_cvtss_sh(x, 0); }
+static inline float bpd_f16_bits_to_f32(uint16_t x) { return _cvtsh_ss(x); }
+
+/* y[i] = FP16(FP16_to_F32(y[i]) + FP16_to_F32(x[i]) * v) -- the real
+ * ggml_vec_mad_f16 scalar-tail formula, F16-rounds y on EVERY call. */
+__attribute__((optimize("fp-contract=off")))
+static inline void bpd_vec_mad_f16(int n, uint16_t* y, const float* x_f32, float v) {
+    for (int i = 0; i < n; i++) {
+        float yv = bpd_f16_bits_to_f32(y[i]);
+        uint16_t xh = bpd_f32_to_f16_bits(x_f32[i]);   /* re-round v's already-widened F32 back to F16 */
+        float xv = bpd_f16_bits_to_f32(xh);
+        y[i] = bpd_f32_to_f16_bits(yv + xv * v);
+    }
+}
+/* y[i] = FP16(FP16_to_F32(y[i]) * v) -- the real ggml_vec_scale_f16
+ * scalar-tail formula, F16-rounds y on EVERY call. */
+__attribute__((optimize("fp-contract=off")))
+static inline void bpd_vec_scale_f16(int n, uint16_t* y, float v) {
+    for (int i = 0; i < n; i++) {
+        float yv = bpd_f16_bits_to_f32(y[i]);
+        y[i] = bpd_f32_to_f16_bits(yv * v);
+    }
+}
+
+__attribute__((optimize("fp-contract=off")))
 void bpd_gqa_attn_cpu(
         const float* q,
         const float* k,
@@ -5381,6 +5796,7 @@ void bpd_gqa_attn_cpu(
         int          kv_offset)
 {
     const int gqa_ratio = n_q_heads / n_kv_heads;
+    uint16_t vkq_buf[8192];  /* >= max head_dim; F16-typed V-accumulator */
 
     for (int qt = 0; qt < n_q_tokens; qt++) {
         const int q_pos = kv_offset + qt;
@@ -5391,45 +5807,58 @@ void bpd_gqa_attn_cpu(
             const float* pq  = q   + (qt * n_q_heads + iq) * head_dim;
             float*       pdst = dst + (qt * n_q_heads + iq) * head_dim;
 
-            /* 1. Compute RAW QK^T scores (NO scale in dot product) */
-            float scores[n_kv];
-            for (int ic = 0; ic < n_kv; ic++) {
+            /* Online/running-max softmax, exactly per the REAL ggml
+             * source (ggml_compute_forward_flash_attn_ext_f16_one_chunk,
+             * ops.cpp): running max M, running sum S. IMPORTANT: S is
+             * PLAIN FLOAT in the real source ("float S = 0.0f;"), NOT
+             * double -- an earlier draft of this rewrite wrongly assumed
+             * double precision for S (by analogy with ggml's softmax sum,
+             * which IS double/ggml_float) before re-checking THIS specific
+             * function's source directly; a real fixture gate against
+             * __fattn__-0 caught the resulting few-ULP divergence (correct
+             * for qt=0 [no rescale needed], growing with more KV positions
+             * accumulated -- exactly the signature of an accumulator
+             * precision mismatch compounding over the KV loop), which is
+             * what led back to checking the source line-by-line and finding
+             * S is float, not double, in the real function. */
+            float M = -INFINITY;  /* matches real ggml exactly (was -1e38f, a plausible-but-wrong substitute) */
+            float S = 0.0f;
+            for (int d = 0; d < head_dim; d++) vkq_buf[d] = bpd_f32_to_f16_bits(0.0f);
+
+            for (int ic = 0; ic <= q_pos && ic < n_kv; ic++) {
                 const float* pk = k + (ic * n_kv_heads + kv_head) * head_dim;
-                float s = 0.0f;
-                for (int d = 0; d < head_dim; d++)
-                    s += pq[d] * pk[d];
-                scores[ic] = s;  /* raw, unscaled */
-            }
+                float s = bpd_qk_dot_f16_scalar(pq, pk, head_dim);  /* scalar f16 QK, double-accum, matches real ggml_vec_dot_f16 */
+                s = s * scale;
+                /* causal masking: positions beyond q_pos are excluded by
+                 * the loop bound above (skipped entirely, not computed-
+                 * then-masked -- matches ggml's real masked-position
+                 * skip semantics for fully-masked entries). */
 
-            /* 2. Scale + causal mask (matching ggml: scale applied here, not in dot product) */
-            float max_val = -1e38f;
-            for (int ic = 0; ic < n_kv; ic++) {
-                float sv = (ic <= q_pos) ? scores[ic] * scale : -1e38f;
-                scores[ic] = sv;
-                if (sv > max_val) max_val = sv;
-            }
+                float Mold = M;
+                float ms = 1.0f;
+                float vs;
 
-            /* 3. exp(x - max) and sum (batch softmax, matching ggml's 3-pass) */
-            float sum_exp = 0.0f;
-            for (int ic = 0; ic < n_kv; ic++) {
-                float e = expf(scores[ic] - max_val);
-                scores[ic] = e;
-                sum_exp += e;
-            }
+                if (s > M) {
+                    M = s;
+                    ms = expf(Mold - M);
+                    bpd_vec_scale_f16(head_dim, vkq_buf, ms);
+                    vs = 1.0f;
+                } else {
+                    vs = expf(s - M);
+                }
 
-            /* 4. Normalize */
-            float inv_sum = (sum_exp == 0.0f) ? 0.0f : 1.0f / sum_exp;
-            for (int ic = 0; ic < n_kv; ic++)
-                scores[ic] *= inv_sum;
-
-            /* 5. Weighted sum of V */
-            for (int d = 0; d < head_dim; d++) pdst[d] = 0.0f;
-            for (int ic = 0; ic < n_kv; ic++) {
                 const float* pv = v + (ic * n_kv_heads + kv_head) * head_dim;
-                float w = scores[ic];
-                for (int d = 0; d < head_dim; d++)
-                    pdst[d] += pv[d] * w;
+                bpd_vec_mad_f16(head_dim, vkq_buf, pv, vs);
+
+                S = S * ms + vs;  /* plain float, matching the real ggml source exactly */
             }
+
+            /* Final normalization: VKQ / S (matching ggml's
+             * finalization step; S==0 fallback leaves output at zero,
+             * avoiding div-by-zero -- matches the all-masked edge case). */
+            float inv_S = (S == 0.0f) ? 0.0f : 1.0f / S;  /* matches real ggml: "S == 0.0f ? 0.0f : 1.0f/S" exactly */
+            for (int d = 0; d < head_dim; d++)
+                pdst[d] = bpd_f16_bits_to_f32(vkq_buf[d]) * inv_S;
         }
     }
 }
@@ -5501,9 +5930,47 @@ void bpd_mul_f32_cpu(const float * a, const float * b, float * dst, int n) {
  * gate and up are the outputs of gate_proj and up_proj respectively.
  * dst is written in-place (may alias gate).
  */
+static inline __m256 bpd_mla256(__m256 a, __m256 b, __m256 c){ return _mm256_add_ps(_mm256_mul_ps(a,b), c); }
+static inline __m256 bpd_nmla256(__m256 a, __m256 b, __m256 c){ return _mm256_sub_ps(c, _mm256_mul_ps(a,b)); }
+static inline __m256i bpd_add_epi32_avx1(__m256i x, __m256i y){
+    __m128i xl=_mm256_castsi256_si128(x), xh=_mm256_extractf128_si256(x,1);
+    __m128i yl=_mm256_castsi256_si128(y), yh=_mm256_extractf128_si256(y,1);
+    __m256i r=_mm256_castsi128_si256(_mm_add_epi32(xl,yl));
+    return _mm256_insertf128_si256(r,_mm_add_epi32(xh,yh),1);
+}
+static inline __m256i bpd_slli_epi32_avx1(__m256i x, int n){
+    __m128i xl=_mm256_castsi256_si128(x), xh=_mm256_extractf128_si256(x,1);
+    __m256i r=_mm256_castsi128_si256(_mm_slli_epi32(xl,n));
+    return _mm256_insertf128_si256(r,_mm_slli_epi32(xh,n),1);
+}
+/* ggml-EXACT poly-exp (vec.h ggml_v_expf), FMA-expanded to mul+add to match ggml's no-FMA
+ * binary on this Ivy Bridge box. VERIFIED 0 ULP vs ggml_vec_silu_f32 across 1M values. */
+static inline __m256 bpd_exp256_ps(__m256 x) {
+    const __m256 r = _mm256_set1_ps(0x1.8p23f);
+    const __m256 z = bpd_mla256(x, _mm256_set1_ps(0x1.715476p+0f), r);
+    const __m256 n = _mm256_sub_ps(z, r);
+    const __m256 b = bpd_nmla256(n, _mm256_set1_ps(0x1.7f7d1cp-20f),
+                                 bpd_nmla256(n, _mm256_set1_ps(0x1.62e4p-1f), x));
+    const __m256i e = bpd_slli_epi32_avx1(_mm256_castps_si256(z), 23);
+    const __m256 k = _mm256_castsi256_ps(bpd_add_epi32_avx1(e, _mm256_castps_si256(_mm256_set1_ps(1))));
+    const __m256 u = _mm256_mul_ps(b, b);
+    const __m256 j = bpd_mla256(bpd_mla256(bpd_mla256(_mm256_set1_ps(0x1.0e4020p-7f), b, _mm256_set1_ps(0x1.573e2ep-5f)), u,
+                                 bpd_mla256(_mm256_set1_ps(0x1.555e66p-3f), b, _mm256_set1_ps(0x1.fffdb6p-2f))),
+                             u, _mm256_mul_ps(_mm256_set1_ps(0x1.ffffecp-1f), b));
+    return bpd_mla256(j, k, k);
+}
+
 void bpd_swiglu_fuse_cpu(const float * gate, const float * up, float * dst, int n) {
-    for (int i = 0; i < n; i++)
-        dst[i] = (gate[i] / (1.0f + expf(-gate[i]))) * up[i];
+    /* VECTORIZED SwiGLU: silu(gate)*up = (gate/(1+exp(-gate)))*up. Poly-exp (4 ULP vs libm). */
+    int i = 0;
+    const __m256 one = _mm256_set1_ps(1.0f), zero = _mm256_setzero_ps();
+    for (; i + 8 <= n; i += 8) {
+        __m256 g = _mm256_loadu_ps(gate + i);
+        __m256 e = bpd_exp256_ps(_mm256_sub_ps(zero, g));
+        __m256 silu = _mm256_div_ps(g, _mm256_add_ps(one, e));
+        _mm256_storeu_ps(dst + i, _mm256_mul_ps(silu, _mm256_loadu_ps(up + i)));
+    }
+    for (; i < n; i++) dst[i] = (gate[i] / (1.0f + expf(-gate[i]))) * up[i];
 }
 /* ─────────────────────────────────────────────────────────────────────────
  * L.1.10  bpd_llama_block_cpu / bpd_llama_forward_cpu
@@ -5605,6 +6072,64 @@ typedef struct {
 } bpd_llama_weights;
 
 /* ── Single transformer block ────────────────────────────────────────── */
+/* Optional BPD-side manifest.tsv dump hook, mirroring the reference-side
+ * debug.cpp patch's format/naming exactly (Qcur-N, Kcur-N, Vcur-N,
+ * __fattn__-N etc.), gated behind BPD_DUMP_DIR (no-op, zero overhead when
+ * unset -- matches the LLAMA_DUMP_DIR pattern used on the reference side).
+ * Added 2026-09-07 (Doresh) for Mavhir's Level-1 per-layer paired-fixture
+ * verification, per her request after the flash-attention rewrite landed. */
+#include <stdio.h>
+static int bpd_dump_enabled_cached = -1;
+static int bpd_dump_step_counter = 0;
+static int bpd_dump_current_layer = -1;
+/* Backward-compatible: NOT part of bpd_llama_block_cpu's signature (avoids
+ * breaking the existing ctypes ABI / any other caller). The Python
+ * orchestrator calls this once per layer before bpd_llama_block_cpu when
+ * BPD_DUMP_DIR is set, so dumped tensor names can carry "-N" suffixes
+ * matching the reference-side naming convention exactly. */
+void bpd_dump_set_layer_idx(int layer_idx) { bpd_dump_current_layer = layer_idx; }
+static const char* bpd_dump_dir(void) {
+    if (bpd_dump_enabled_cached < 0) {
+        const char* d = getenv("BPD_DUMP_DIR");
+        bpd_dump_enabled_cached = (d && *d) ? 1 : 0;
+    }
+    return bpd_dump_enabled_cached ? getenv("BPD_DUMP_DIR") : NULL;
+}
+static void bpd_dump_tensor(const char* name_base, const float* data, int64_t ne0, int64_t ne1) {
+    const char* dir = bpd_dump_dir();
+    if (!dir) return;
+    char name[128];
+    if (bpd_dump_current_layer >= 0)
+        snprintf(name, sizeof(name), "%s-%d", name_base, bpd_dump_current_layer);
+    else
+        snprintf(name, sizeof(name), "%s", name_base);
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%04d_%s.bin", dir, bpd_dump_step_counter++, name);
+    FILE* fp = fopen(path, "wb");
+    if (!fp) return;
+    uint32_t dtype_code = 0; /* F32 */
+    uint32_t n_dims = 4;
+    int64_t ne[4] = {ne0, ne1, 1, 1};
+    size_t nb[4] = {sizeof(float), (size_t)ne0*sizeof(float), (size_t)ne0*ne1*sizeof(float), (size_t)ne0*ne1*sizeof(float)};
+    fwrite(&dtype_code, sizeof(dtype_code), 1, fp);
+    fwrite(&n_dims, sizeof(n_dims), 1, fp);
+    fwrite(ne, sizeof(int64_t), 4, fp);
+    fwrite(nb, sizeof(size_t), 4, fp);
+    uint64_t n_bytes = (uint64_t)ne0 * ne1 * sizeof(float);
+    fwrite(&n_bytes, sizeof(n_bytes), 1, fp);
+    fwrite(data, 1, n_bytes, fp);
+    fclose(fp);
+
+    char manifest_path[512];
+    snprintf(manifest_path, sizeof(manifest_path), "%s/manifest.tsv", dir);
+    FILE* mfp = fopen(manifest_path, "a");
+    if (mfp) {
+        fprintf(mfp, "%04d\t%s\tBPD_DUMP\tf32\t%lld,%lld,1,1\n",
+                bpd_dump_step_counter - 1, name, (long long)ne0, (long long)ne1);
+        fclose(mfp);
+    }
+}
+
 void bpd_llama_block_cpu(
         float*                       x,          /* [n_tokens, embed_dim] in/out */
         const bpd_llama_layer_weights* lw,
@@ -5617,7 +6142,8 @@ void bpd_llama_block_cpu(
         float*                       scratch1,   /* >= n_tokens * max(embed_dim, ffn_dim) */
         float*                       scratch2,   /* >= n_tokens * max(embed_dim, ffn_dim) */
         float*                       scratch3,   /* >= n_tokens * max(n_heads*head_dim, ffn_dim) */
-        const float*                 rope_freqs) /* [n_dims/2] or NULL for no NTK-aware scaling */
+        const float*                 rope_freqs, /* [n_dims/2] or NULL */
+        int                          n_out)      /* inp_out_ids: FFN runs on last n_out tokens */
 {
     const int E = cfg->embed_dim;
     const int H = cfg->n_heads;
@@ -5625,6 +6151,8 @@ void bpd_llama_block_cpu(
     const int D = cfg->head_dim;
     const int F = cfg->ffn_dim;
     const int n_kv = kv_pos + n_tokens;  /* total filled KV length after this step */
+    const int n_skip = n_tokens - n_out;   /* inp_out_ids: FFN-side rows to skip */
+    float* x_out = x + (size_t)n_skip * E;
     /* For canonical_ggml-bit-identity, attention must process ALL max_seq_len positions
      * (with causal mask producing -inf scores for unfilled ones), not just n_kv filled
      * positions. The reduction tree size of the softmax must match ggml's.
@@ -5647,10 +6175,12 @@ void bpd_llama_block_cpu(
      *    freq_factors per LLM_ARCH_LLAMA's LLAMA_ROPE_TYPE_NORM. */
     bpd_rope_norm_freqs_cpu(scratch2, scratch2, pos_ids, rope_freqs,
                             n_tokens, H, D, cfg->rope_dim, cfg->rope_base);
+    bpd_dump_tensor("Qcur", scratch2, (int64_t)H * D, n_tokens);
 
     /* 4. RoPE on K (in-place in scratch3). Same NORM + freq_factors. */
     bpd_rope_norm_freqs_cpu(scratch3, scratch3, pos_ids, rope_freqs,
                             n_tokens, HKV, D, cfg->rope_dim, cfg->rope_base);
+    bpd_dump_tensor("Kcur", scratch3, (int64_t)HKV * D, n_tokens);
 
     /* 5. Write K to KV cache (dtype dispatched by cfg->kv_cache_f16).
      *    Substrate-design parameter family: kv_cache_dtype in {f16, f32}.
@@ -5666,6 +6196,7 @@ void bpd_llama_block_cpu(
 
     /* 6. V projection: [n_tokens, E] @ W_v^T → [n_tokens, HKV*D] */
     bpd_qmatmul_q8_0_llamafile_cpu(lw->w_v, scratch1, scratch3, HKV * D, n_tokens, E);
+    bpd_dump_tensor("Vcur", scratch3, (int64_t)HKV * D, n_tokens);
 
     /* 7. Write V to KV cache (dtype dispatched by cfg->kv_cache_f16) */
     if (cfg->kv_cache_f16) {
@@ -5703,6 +6234,7 @@ void bpd_llama_block_cpu(
     bpd_gqa_attn_cpu(scratch2, k_cache_f32, v_cache_f32,
                           scratch1,  /* output: [n_tokens, H*D] */
                           n_tokens, n_kv_full, H, HKV, D, scale, kv_pos);
+    bpd_dump_tensor("__fattn__", scratch1, (int64_t)H * D, n_tokens);
 
     if (allocated_scratch) {
         free(k_cache_f32);
@@ -5718,22 +6250,22 @@ void bpd_llama_block_cpu(
     /* ── FFN sub-block ───────────────────────────────────────────────── */
 
     /* 11. RMSNorm (FFN) */
-    bpd_rmsnorm_llama_cpu(x, lw->ffn_norm_w, scratch1, n_tokens, E, cfg->rms_eps);
+    bpd_rmsnorm_llama_cpu(x_out, lw->ffn_norm_w, scratch1, n_out, E, cfg->rms_eps);
 
     /* 12. Gate projection: [n_tokens, E] @ W_gate^T → [n_tokens, F] */
-    bpd_qmatmul_q8_0_llamafile_cpu(lw->w_gate, scratch1, scratch2, F, n_tokens, E);
+    bpd_qmatmul_q8_0_llamafile_cpu(lw->w_gate, scratch1, scratch2, F, n_out, E);
 
     /* 13. Up projection: [n_tokens, E] @ W_up^T → [n_tokens, F] */
-    bpd_qmatmul_q8_0_llamafile_cpu(lw->w_up, scratch1, scratch3, F, n_tokens, E);
+    bpd_qmatmul_q8_0_llamafile_cpu(lw->w_up, scratch1, scratch3, F, n_out, E);
 
     /* 14. SwiGLU: silu(gate) * up → scratch2 */
-    bpd_swiglu_fuse_cpu(scratch2, scratch3, scratch2, n_tokens * F);
+    bpd_swiglu_fuse_cpu(scratch2, scratch3, scratch2, n_out * F);
 
     /* 15. Down projection: [n_tokens, F] @ W_down^T → [n_tokens, E] */
-    bpd_qmatmul_q8_0_llamafile_cpu(lw->w_down, scratch2, scratch1, E, n_tokens, F);
+    bpd_qmatmul_q8_0_llamafile_cpu(lw->w_down, scratch2, scratch1, E, n_out, F);
 
     /* 16. Residual add: x = x + ffn_out */
-    bpd_add_f32_cpu(x, scratch1, x, n_tokens * E);
+    bpd_add_f32_cpu(x_out, scratch1, x_out, n_out * E);
 }
 
 /* ── Full forward pass ───────────────────────────────────────────────── */
@@ -5770,29 +6302,87 @@ void bpd_llama_forward_cpu(
     /* 2. Iterate through all transformer layers */
     const size_t kv_layer_stride = (size_t)cfg->max_seq_len * HKV * D;
     for (int layer = 0; layer < cfg->n_layers; layer++) {
+        bpd_dump_set_layer_idx(layer);  /* no-op unless BPD_DUMP_DIR is set */
         uint16_t* layer_k_cache = k_cache + layer * kv_layer_stride;
         uint16_t* layer_v_cache = v_cache + layer * kv_layer_stride;
 
+        /* inp_out_ids: final layer's FFN computes only the last token (matches ollama:
+         * attn_out-{last}={2048,n_tokens}, ffn_inp-{last}={2048,1}). */
+        int layer_n_out = (layer == cfg->n_layers - 1) ? 1 : n_tokens;
         bpd_llama_block_cpu(x, &weights->layers[layer], cfg,
                             pos_ids, n_tokens, kv_pos,
                             layer_k_cache, layer_v_cache,
                             scratch1, scratch2, scratch3,
-                            weights->rope_freqs);
+                            weights->rope_freqs, layer_n_out);
     }
+    {
+        int last = n_tokens - 1;
+        float* x_last = x + (size_t)last * E;
+        float* logits_last = logits_out + (size_t)last * cfg->vocab_size;
+        bpd_dump_set_layer_idx(-1);  /* tail tensors: no layer suffix, matching "norm"/"result_norm"/"result_output" */
+        bpd_rmsnorm_llama_cpu(x_last, weights->output_norm_w, scratch1, 1, E, cfg->rms_eps);
+        /* bpd_rmsnorm_llama_cpu fuses the RMS-divide AND the weight-multiply
+         * into one call (unlike ggml's graph, which has them as two separate
+         * ops: RMS_NORM then MUL). So this dump captures the POST-weight
+         * result, matching the reference's "result_norm" tensor, NOT the
+         * pre-weight "norm" tensor (bpd has no separately-exposed
+         * intermediate for that). Named result_norm here for accuracy. */
+        bpd_dump_tensor("result_norm", scratch1, E, 1);
+        bpd_qmatmul_q8_0_llamafile_cpu(weights->output_w, scratch1, logits_last,
+                                       cfg->vocab_size, 1, E);
+        bpd_dump_tensor("result_output", logits_last, cfg->vocab_size, 1);
+        bpd_argmax_dim_cpu(logits_last, token_out + last, 1, cfg->vocab_size, 1);
+    }
+    goto cleanup;
 
-    /* 3. Final RMSNorm */
-    bpd_rmsnorm_llama_cpu(x, weights->output_norm_w, scratch1, n_tokens, E, cfg->rms_eps);
-
-    /* 4. Output projection (logits): [n_tokens, E] @ W_output^T → [n_tokens, vocab_size] */
-    bpd_qmatmul_q8_0_llamafile_cpu(weights->output_w, scratch1, logits_out,
-                                   cfg->vocab_size, n_tokens, E);
-
-    /* 5. Argmax over vocabulary dimension */
-    bpd_argmax_dim_cpu(logits_out, token_out, n_tokens, cfg->vocab_size, 1);
 
 cleanup:
     free(x);
     free(scratch1);
     free(scratch2);
     free(scratch3);
+}
+
+// ─── bpd_llama_generate_cpu — C-side autoregressive decode loop ───
+// Eliminates Python per-token overhead (FFI + numpy argmax/argsort) by looping in C:
+// prefill the prompt once, then generate n_generate tokens, feeding each argmax back.
+// Scratch (logits/tok_out/pos_ids) allocated ONCE, not per forward call.
+// k_cache/v_cache are passed through opaquely (the forward knows the dtype via cfg).
+void bpd_llama_generate_cpu(
+        const int32_t*             prompt_tokens,
+        int                        prompt_len,
+        int                        n_generate,
+        const bpd_llama_weights*   weights,
+        const bpd_llama_config*    cfg,
+        void*                      k_cache,
+        void*                      v_cache,
+        int32_t*                   out_tokens)
+{
+    const int V = cfg->vocab_size;
+    const int max_batch = prompt_len > 1 ? prompt_len : 1;
+
+    float* logits = (float*)malloc((size_t)max_batch * V * sizeof(float));
+    long*  tok_out = (long*)malloc((size_t)max_batch * sizeof(long));
+    int32_t* pos_ids = (int32_t*)malloc((size_t)max_batch * sizeof(int32_t));
+    if (!logits || !tok_out || !pos_ids) { free(logits); free(tok_out); free(pos_ids); return; }
+
+    // Prefill the prompt (positions 0..prompt_len-1, kv_pos=0).
+    for (int i = 0; i < prompt_len; i++) pos_ids[i] = i;
+    bpd_llama_forward_cpu(prompt_tokens, prompt_len, weights, cfg,
+                          pos_ids, 0, (uint16_t*)k_cache, (uint16_t*)v_cache, logits, tok_out);
+    int n_past = prompt_len;
+    int32_t next = (int32_t)tok_out[prompt_len - 1];
+
+    // Decode: one token per step at kv_pos=n_past, cache accumulates.
+    for (int step = 0; step < n_generate; step++) {
+        out_tokens[step] = next;
+        if (step == n_generate - 1) break;
+        pos_ids[0] = n_past;
+        bpd_llama_forward_cpu(&next, 1, weights, cfg,
+                              pos_ids, n_past, (uint16_t*)k_cache, (uint16_t*)v_cache, logits, tok_out);
+        n_past += 1;
+        next = (int32_t)tok_out[0];
+    }
+
+    free(logits); free(tok_out); free(pos_ids);
 }

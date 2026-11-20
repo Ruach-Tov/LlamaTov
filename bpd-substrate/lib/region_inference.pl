@@ -19,6 +19,9 @@
     infer_region_from_facts/5
 ]).
 
+
+%% clauses grouped by family, not contiguous — declared for warning-free consult.
+:- discontiguous infer_region_kind/6.
 %% ────────────────────────────────────────────────────────────────────
 %% Region inference rules
 %% ────────────────────────────────────────────────────────────────────

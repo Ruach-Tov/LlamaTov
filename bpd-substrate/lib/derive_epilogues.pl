@@ -6,6 +6,9 @@
     emit_c/2
 ]).
 
+
+%% clauses grouped by family, not contiguous — declared for warning-free consult.
+:- discontiguous classify_bottleneck/2, codegen_strategy/2.
 %% ═══════════════════════════════════════════════════════════════
 %% Primitive C operations — the atoms of our expression language.
 %% Each c_prim maps a symbolic function to a C AST node.
@@ -325,7 +328,6 @@ emit_c_avx(S, c_call(fabsf, [A])) :-
 %%   Large matmul (1024²): BLAS wins (hand-tuned microkernel)
 %% ═══════════════════════════════════════════════════════════════
 
-:- export(classify_bottleneck_blas/2).
 :- export(blas_strategy/2).
 
 classify_bottleneck(matmul, blas).
@@ -438,7 +440,7 @@ broadcast_epilogue_def(instancenorm, add(mul(scale_c, x), offset_c)).
 %% difference is that some c_var nodes are broadcast (set1_ps once
 %% per channel) vs loaded (loadu_ps per element).
 
-emit_broadcast_kernel(S, Name, Strategy, BroadcastDef) :-
+emit_broadcast_kernel(S, Name, Strategy, _BroadcastDef) :-
     broadcast_epilogue_def(Name, MathExpr),
     derive_expr(MathExpr, c_var(x), CAST),
     format(S, "/* Auto-generated broadcast epilogue for ~w */~n", [Name]),

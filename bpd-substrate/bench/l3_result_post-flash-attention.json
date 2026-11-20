@@ -1,0 +1,78 @@
+{
+  "label": "post-flash-attention",
+  "timestamp": "2026-09-07T10:04:58",
+  "args": {
+    "baseline": "/home/heath/Ruach-Tov/bpd-substrate/bench/l3_baseline_pre_dispatcher_fix.json",
+    "gguf": "/home/heath/Ruach-Tov/external/llama.cpp/models/llama-3.2-1b-instruct-q8_0.gguf",
+    "tokens": "128000,9906,11,856,836,374",
+    "n_generate": 2,
+    "label": "post-flash-attention",
+    "out": "/tmp/l3_remeasure_result.json"
+  },
+  "summary": {
+    "name": "current",
+    "steps": 2,
+    "vocab_size": 128256,
+    "max_ulp_across_steps": 0,
+    "max_abs_diff_across_steps": 0.0,
+    "step0_bit_identical": 128256,
+    "step0_fail": 0,
+    "argmax_all_match": true,
+    "verdict": "0-ULP achieved"
+  },
+  "delta_vs_baseline": {
+    "baseline_verdict": "drift detected (max ULP 2.36e+09)",
+    "current_verdict": "0-ULP achieved",
+    "step0_bit_identical_delta": 128256,
+    "step0_fail_delta": -128243,
+    "max_ulp_ratio_current_over_baseline": 0.0,
+    "max_abs_diff_ratio_current_over_baseline": 0.0,
+    "interpretation": "IMPROVEMENT: drift closed \u2192 0-ULP achieved"
+  },
+  "raw_result": {
+    "args": {
+      "gguf": "/home/heath/Ruach-Tov/external/llama.cpp/models/llama-3.2-1b-instruct-q8_0.gguf",
+      "tokens": "128000,9906,11,856,836,374",
+      "n_generate": 2,
+      "llama_dump_bin": "/tmp/llama_logits_dump",
+      "bpd_so": "/tmp/bpd_test/build/bpd_cpu.so",
+      "infer_script": "bench/bpd_llamatov_infer.py",
+      "abs_tol": 1e-05,
+      "out": "/tmp/l3_remeasure_result.json"
+    },
+    "per_step": [
+      {
+        "n_vocab": 128256,
+        "bit_identical": 128256,
+        "pass_abs_tolerance": 0,
+        "fail": 0,
+        "max_ulp": 0,
+        "median_ulp": 0,
+        "max_abs_diff": 0.0,
+        "argmax_match": true,
+        "argmax_ours": 35266,
+        "argmax_theirs": 35266,
+        "step": 0
+      },
+      {
+        "n_vocab": 128256,
+        "bit_identical": 128256,
+        "pass_abs_tolerance": 0,
+        "fail": 0,
+        "max_ulp": 0,
+        "median_ulp": 0,
+        "max_abs_diff": 0.0,
+        "argmax_match": true,
+        "argmax_ours": 323,
+        "argmax_theirs": 323,
+        "step": 1
+      }
+    ],
+    "summary": {
+      "n_steps": 2,
+      "all_bit_identical": true,
+      "argmax_all_match": true,
+      "max_ulp_across_steps": 0
+    }
+  }
+}

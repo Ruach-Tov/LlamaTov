@@ -1063,7 +1063,7 @@ causal_mask_kernel(K) :-
                       c_binop(+,
                           c_binop(*, c_var(row), c_var(stride)),
                           c_var(col))),
-                  c_float_raw('-1e30f'))])]).
+                  c_float_lit(-1.0e30, f))])]).
 
 %% gpu_causal_mask/3 wrapper: launches k_causal_mask once per
 %% attention head. Grid per launch: dim3(T, (T+255)/256).

@@ -145,10 +145,15 @@ generate_fused_kernel(kernel(spatial_with_epilogue, [_Spatial|EpiOps], _), _Base
     %% The input is the matmul accumulator (register variable)
     chain_ops(EpiOps, c_var(val), FusedExpr),
     %% Generate the store with fused expression
+    %% c[r][cl] → register tile element; C[(row0+r)*N + col0+cl] → global output
     EpilogueStatements = [
-        c_raw('float val = c[r][cl];'),
+        c_decl(float, val, c_index(c_index(c_id(c), c_id(r)), c_id(cl))),
         c_assign(c_var(val), FusedExpr),
-        c_raw('C[(row0+r)*N + col0+cl] = val;')
+        c_assign(
+            c_index(c_id('C'),
+                    c_add(c_mul(c_add(c_id(row0), c_id(r)), c_id('N')),
+                          c_add(c_id(col0), c_id(cl)))),
+            c_id(val))
     ].
 
 %% ═══════════════════════════════════════

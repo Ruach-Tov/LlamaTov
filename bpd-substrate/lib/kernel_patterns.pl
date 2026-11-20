@@ -12,6 +12,9 @@
     pattern_ir_shape/2    % pattern_ir_shape(Pattern, IRShape)
 ]).
 
+
+%% clauses grouped by family, not contiguous — declared for warning-free consult.
+:- discontiguous kernel_pattern/2, pattern_desc/2, pattern_ir_shape/2.
 %% ============================================================
 %% Pattern 1: unary_elementwise
 %% IR shape: loop over <4 x float>, apply f(x) → y

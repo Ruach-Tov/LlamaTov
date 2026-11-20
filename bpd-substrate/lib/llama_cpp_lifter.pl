@@ -28,6 +28,7 @@
     lift_arch_full/3,                 % +ArchName, +RepoPath, -BpdFacts  (Phase 3)
     lift_arch_tensors/2,              % +ArchSourcePath, -Tensors  (Phase 3a)
     lift_arch_graph_ops/2,            % +ArchSourcePath, -OpSequence  (Phase 3b)
+    find_all_llm_builders/2,          % +SourcePath, -[arch(Name)-Ops]  (all 56 builders)
     lift_graph_aliases/2,             % +ModelsHeaderPath, -Aliases  (Phase 3c)
     arch_count/1,                     % -N (number of archs in the enum)
     %% Shared structural parsers for models.h lines. Exported because
@@ -358,14 +359,34 @@ extract_graph_constructor_body(Source, Body) :-
     ;  fail
     ).
 
-%% Find the open-paren after `::graph::graph(` or `::graph<X>::graph(`.
+%% Find the open-paren of the graph-builder constructor.
+%% UPDATED 2026-05-29 (Iyun): current llama.cpp refactored from `graph::graph`
+%% to per-arch `struct llm_build_<arch> : public llm_graph_context { llm_build_<arch>(...) {...} }`.
+%% Primary: the new `llm_build_<arch>(` constructor pattern. Fallbacks: the old
+%% graph::graph forms (so older vendored llama.cpp still lifts). Verified: c_ast
+%% parses the ggml builder bodies these constructors contain (ggml_mul_mat etc.).
+find_constructor_open_paren(Source, SrcLen, ParenPos) :-
+    find_llm_build_open_paren(Source, SrcLen, ParenPos).
 find_constructor_open_paren(Source, _SrcLen, ParenPos) :-
     ( sub_string(Source, MatchStart, _, _, "::graph::graph(")
     -> ParenPos is MatchStart + 14
-    ; %% Templated form: `graph<...>::graph(`
-      sub_string(Source, MatchStart, _, _, ">::graph("),
+    ; sub_string(Source, MatchStart, _, _, ">::graph("),
       ParenPos is MatchStart + 8
     ).
+
+%% Find a `llm_build_<arch>(` constructor open-paren. Matches the constructor
+%% (which has a body) by requiring it be followed (after its param list) by
+%% `: llm_graph_context` — distinguishing the ctor from the struct fwd-decl.
+%% For the generic (first-builder) case we take the first such constructor;
+%% lift_arch_graph_ops can be given a specific arch via find_named_builder/4.
+find_llm_build_open_paren(Source, _SrcLen, ParenPos) :-
+    sub_string(Source, MatchStart, _, _After, "llm_build_"),
+    %% the token right after `llm_build_<name>` up to `(` must be the ctor call
+    sub_string(Source, MatchStart, _, _, Frag),
+    sub_string(Frag, 0, 200, _, Window),       % look-ahead window
+    sub_string(Window, POpen, 1, _, "("),
+    sub_string(Window, _, _, _, "llm_graph_context"),  % inheritance/init marker present
+    ParenPos is MatchStart + POpen, !.
 
 %% Find matching close-paren given current depth = 1 at start.
 find_close_paren(Source, Pos, MaxPos, Depth, Result) :-
@@ -820,3 +841,75 @@ smoke_test :-
     -> format("  Enum-only list: ~w~n", [EnumOnly])
     ;  true
     ).
+%% find_all_llm_builders/2 — per-arch op extraction for ALL llm_build_<arch> builders.
+%% (Iyun, 2026-05-29, mavchin's lane-grant: I take all-builders coverage; he owns
+%%  the finder window-vs-brace-match robustness independently — clean parallel.)
+%%
+%% Serves Heath's 100%-coverage goal: first-match (just llama) leaves 55 archs
+%% uncovered; this enumerates EVERY llm_build_<arch> constructor, captures its arch
+%% NAME, extracts its body via the existing balanced-brace machinery, lifts each.
+%% ADDITIVE: does not modify mavchin's find_llm_build_open_paren/3 (the finder).
+%%
+%% find_all_llm_builders(+SourcePath, -ArchOps)
+%%   ArchOps = [arch(Name)-Ops, ...]  one entry per builder found.
+
+find_all_llm_builders(SourcePath, ArchOps) :-
+    read_file_to_string(SourcePath, Source, []),
+    string_length(Source, SrcLen),
+    findall(Name-Body,
+        builder_body(Source, SrcLen, Name, Body),
+        NameBodies),
+    maplist(lift_one_builder, NameBodies, ArchOps).
+
+lift_one_builder(Name-Body, arch(Name)-Ops) :-
+    ( catch(lift_op_sequence(Body, Ops), _, Ops = []) -> true ; Ops = [] ).
+
+%% builder_body/4: enumerate (backtrackable) each llm_build_<arch> constructor,
+%% capture the arch NAME, and extract its balanced-brace body. Reuses the
+%% existing find_close_paren/find_open_brace/find_close_brace machinery.
+builder_body(Source, SrcLen, Name, Body) :-
+    %% find every "llm_build_" occurrence (NO cut -> backtracks over all)
+    sub_string(Source, MatchStart, _, _, "llm_build_"),
+    NameStart is MatchStart + 10,           % length("llm_build_") = 10
+    %% read the arch identifier up to the '(' of the constructor
+    read_identifier(Source, NameStart, SrcLen, NameCodes, ParenPos),
+    NameCodes \= [],
+    atom_codes(Name, NameCodes),
+    %% confirm this is the CONSTRUCTOR (has llm_graph_context init), not fwd-decl/use
+    is_constructor_at(Source, ParenPos, SrcLen),
+    %% extract balanced-brace body using existing machinery
+    NextAfter is ParenPos + 1,
+    find_close_paren(Source, NextAfter, SrcLen, 1, ClosePPos),
+    AfterParams is ClosePPos + 1,
+    find_open_brace(Source, AfterParams, SrcLen, OpenBracePos),
+    BodyStart is OpenBracePos + 1,
+    find_close_brace(Source, BodyStart, SrcLen, 1, CloseBracePos),
+    BodyLen is CloseBracePos - BodyStart,
+    sub_string(Source, BodyStart, BodyLen, _, Body).
+
+%% read_identifier: collect [A-Za-z0-9_] codes from Pos until the next '(' .
+%% Returns the identifier codes and the position of the '('.
+read_identifier(Source, Pos, MaxPos, [C|Cs], ParenPos) :-
+    Pos < MaxPos,
+    sub_string(Source, Pos, 1, _, Ch), string_codes(Ch, [C]),
+    ident_code(C), !,
+    Next is Pos + 1,
+    read_identifier(Source, Next, MaxPos, Cs, ParenPos).
+read_identifier(Source, Pos, _MaxPos, [], Pos) :-
+    %% STRICT: identifier must be IMMEDIATELY followed by open-paren (constructor
+    %% form). Rejects the struct-declaration occurrence (llm_build_<arch> followed
+    %% by space/colon, not paren), so each arch counts ONCE. Fixed 112 -> 56 (Iyun).
+    sub_string(Source, Pos, 1, _, "(").
+
+ident_code(C) :- (C >= 0'a, C =< 0'z) ; (C >= 0'A, C =< 0'Z) ; (C >= 0'0, C =< 0'9) ; C =:= 0'_.
+
+%% is_constructor_at: within a window after the param list, the llm_graph_context
+%% init marker is present (distinguishes ctor from forward-decl / call sites).
+is_constructor_at(Source, ParenPos, SrcLen) :-
+    NextAfter is ParenPos + 1,
+    ( find_close_paren(Source, NextAfter, SrcLen, 1, ClosePPos) ->
+        WinStart is ClosePPos,
+        WinLen is min(120, SrcLen - WinStart),
+        sub_string(Source, WinStart, WinLen, _, Win),
+        sub_string(Win, _, _, _, "llm_graph_context")
+    ; fail ).

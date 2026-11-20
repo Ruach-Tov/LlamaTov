@@ -56,6 +56,9 @@ Result = ok  %% or error(view_exceeds_base, Details)
     scale_matches_oracle/2
 ]).
 
+
+%% clauses grouped by family, not contiguous — declared for warning-free consult.
+:- discontiguous check_one_invariant/1.
 %% ═══════════════════════════════════════════════════════════════════════
 %% Dynamic facts: the compute graph
 %% ═══════════════════════════════════════════════════════════════════════
@@ -348,7 +351,7 @@ dtype_bytes(q4_k, 144). %% K-quant block size
 %! check_dtype_coherence(+Op1, +Op2, -Result) is det.
 %  Verify that the output dtype of Op1 matches the expected input dtype of Op2.
 check_dtype_coherence(Op1, Op2, Result) :-
-    op(Op1, Op1Type, _, Outputs),
+    op(Op1, _Op1Type, _, Outputs),
     op(Op2, Op2Type, Inputs, _),
     member(OutTensor, Outputs),
     member(InTensor, Inputs),
@@ -514,9 +517,9 @@ check_scale_coherence(MatmulOp, SoftmaxOp, Result) :-
         )
     ;
         %% Not direct — check if there's a scale op in between
-        (op(ScaleOp, scale, [MatmulOut], [SoftmaxIn]) ->
+        (op(_ScaleOp, scale, [MatmulOut], [SoftmaxIn]) ->
             Result = ok  %% Explicit scale op between them
-        ; op(ScaleOp, mul, [MatmulOut|_], [SoftmaxIn]) ->
+        ; op(_ScaleOp, mul, [MatmulOut|_], [SoftmaxIn]) ->
             Result = ok  %% Multiplication used as scale
         ;
             %% Different tensors, no scale op found
@@ -580,7 +583,7 @@ check_unique_names(Violations) :-
     findall(
         ambiguous(Name, Indices),
         (   tensor(Name, _, _, _, _, _, _),
-            findall(Idx, 
+            findall(t, 
                 (tensor(Name, _, _, _, _, _, _), op(_, _, _, [Name|_]), true),
                 Indices),
             length(Indices, N),

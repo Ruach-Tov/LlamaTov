@@ -224,6 +224,17 @@ graph_aliased(llamacpp:hunyuan_dense, llamacpp:hunyuan_vl).
 graph_aliased(llamacpp:lfm2moe, llamacpp:lfm2).
 graph_aliased(llamacpp:mamba2, llamacpp:mamba).
 
+%% Iyun 2026-05-31 (Heath terminology_change directive): mistral and llama3 are
+%% SYNONYMOUS jargon for the llama graph. llama.cpp has NO separate LLM_ARCH_MISTRAL
+%% -- mistral GGUFs report general.architecture="llama" and build via llm_build_llama
+%% (llama-model.cpp:4475, dispatch at :12903 case LLM_ARCH_LLAMA). Verified by source
+%% inspection: the build switch routes LLAMA (no MISTRAL case exists). So the heatmap's
+%% [mistral, ...] coordinates ARE [llama, ...] coordinates; Iyun's llama3 0-ULP
+%% reproduction (full 16-layer) verifies the SAME graph.
+graph_aliased(llamacpp:mistral, llamacpp:llama).
+graph_aliased(llamacpp:llama3,  llamacpp:llama).
+graph_aliased(llamacpp:llama32, llamacpp:llama).
+
 
 %% canonicalize_arch/2: given an arch name (from any source), return its
 %% llama.cpp canonical name after applying BOTH KINDS of relationships

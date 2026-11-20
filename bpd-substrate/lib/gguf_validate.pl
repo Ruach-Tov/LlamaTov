@@ -161,7 +161,11 @@ check_type_consistency(TensorInfos, Result) :-
         extract_layer_name(TensorInfos, Layer),
         findall(Type, (
             member(tensor_info(Name, _, Type, _), TensorInfos),
-            atom_concat(Layer, _, Name)
+            atom_concat(Layer, _, Name),
+            %% norm weights and biases are F32 BY DESIGN in quantized models;
+            %% only same-ROLE type mixing is suspicious (review fix, Bocher).
+            \+ sub_atom(Name, _, _, _, 'norm'),
+            \+ sub_atom(Name, _, _, _, '.bias')
         ), TypeList),
         sort(TypeList, Types),
         length(Types, Len),
@@ -210,10 +214,13 @@ requires_rope(gemma2).
 requires_rope(starcoder2).
 
 has_rope_params(Metadata) :-
-    (member('llama.rope.freq_base'-_, Metadata) ;
-     member('rope.freq_base'-_, Metadata) ;
-     member('llama.rope.dimension_count'-_, Metadata) ;
-     member('rope.dimension_count'-_, Metadata)).
+    %% Any ARCH-prefixed or bare rope key counts: qwen2.rope.freq_base,
+    %% llama.rope.dimension_count, rope.freq_base, ... (fix: the old version
+    %% hardcoded llama.* only, so every non-llama arch failed validation
+    %% on its own correct metadata — found on the production qwen GGUF,
+    %% review tour 2026-06-13, Bocher).
+    member(Key-_, Metadata),
+    sub_atom(Key, _, _, _, 'rope.'), !.
 
 %% ═══════════════════════════════════════════════════════════════
 %% CHECK 5: All tensor types recognized

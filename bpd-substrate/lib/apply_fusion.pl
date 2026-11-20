@@ -24,7 +24,9 @@
     apply_epilogue_fusion/3,
     apply_elementwise_chain_fusion/3,
     apply_layout_transparent_fusion/3,
-    apply_fusion_to_facts/3
+    apply_fusion_to_facts/3,
+    apply_fusion_gated/4,
+    gate_obligation/3
 ]).
 
 %% ────────────────────────────────────────────────────────────────────
@@ -51,10 +53,15 @@
 %%       sequence(Block, FusedName, Op1's sequence)
 %%   - Remove the intermediate tensor's region facts (op_writes/op_reads)
 
-apply_epilogue_fusion(InputFacts, fusion(epilogue_matmul_elementwise,
+apply_epilogue_fusion(InputFacts, fusion(_FusionName,
                                           [Op1, Op2], _EqClass),
                        OutputFacts) :-
-    %% Extract data about Op1 (the matmul) and Op2 (the elementwise)
+    %% Extract data about Op1 (the producer) and Op2 (the consumer). NOTE: the rewrite is
+    %% PRODUCER-OP-CLASS-AGNOSTIC — it reasons from the BINDING SHAPE (Op1 writes Intermediate,
+    %% Op2 reads it), so it handles a matmul-output intermediate (epilogue_matmul_elementwise)
+    %% AND a quantize-output intermediate (quant_into_gemv) identically. The head binds the
+    %% fusion name as a variable so BOTH rule names route here. (Metayen's symmetric-producer
+    %% flag, verified by test_apply_fusion_symmetric.pl.)
     member(op_kind(Op1, Kind1), InputFacts),
     member(op_inputs(Op1, Inputs1), InputFacts),
     member(op_output(Op1, Intermediate), InputFacts),
@@ -150,6 +157,65 @@ apply_fusion_to_facts(InputFacts,
     apply_layout_transparent_fusion(InputFacts,
                                      fusion(layout_transparent, Ops, EqClass),
                                      OutputFacts).
+
+%% Rule 4: quant_into_gemv (prologue quant + matmul). Structurally symmetric to the epilogue
+%% fusion (producer/consumer flip: the quantize produces the intermediate, the matmul consumes
+%% it), so it reuses the epilogue apply machinery for the fact rewrite — the intermediate is
+%% absorbed, the producer+consumer become one fused op. (Metayen's downstream flag: apply
+%% handles matmul-output AND quantize-output intermediates symmetrically because it reasons from
+%% the BINDING SHAPE — producer writes Intermediate, consumer reads it — not from the producer's
+%% op_class. The same eliminate_tensor + fused_op rewrite applies to both. Verified by
+%% test_apply_fusion_symmetric.pl.)
+apply_fusion_to_facts(InputFacts,
+                      fusion(quant_into_gemv, Ops, EqClass),
+                      OutputFacts) :-
+    apply_epilogue_fusion(InputFacts,
+                           fusion(quant_into_gemv, Ops, EqClass),
+                           OutputFacts).
+
+%% ─────────────────────────────────────────────────────────────────────────
+%% apply_fusion_gated(+InputFacts, +Fusion, -OutputFacts, -Obligation)
+%% ─────────────────────────────────────────────────────────────────────────
+%%
+%% The GATED apply: performs the symbolic rewrite AND emits a verification
+%% obligation that the runtime 0-ULP gate (bpd/kernelgen/fusion_gate.py) must
+%% DISCHARGE before the fusion is considered committed. This is the "all
+%% automatic, provably 0-ULP" contract made explicit and enforceable in the
+%% fact stream: the symbolic layer cannot, on its own, prove the emitted fused
+%% kernel is numerically equivalent — only RUNNING both kernels can. So the
+%% rewrite records what must be checked, and the gate checks it.
+%%
+%% The obligation = gate_obligation(FusionName, EquivClass, Ops). A fusion whose
+%% obligation has not been discharged (gate PASS) MUST NOT enter the graph.
+%% This is the symbolic counterpart to Bocher's standing GR certification:
+%% apply_fusion records the claim; the gate attests it; only attested fusions
+%% are committed. (Construction makes correctness structural; the gate makes
+%% it attested — neither alone is the discipline. — Bocher)
+%% PRECONDITION (Iyun 2026-06-12): the reduction-order gate. A fusion that folds an op carrying a
+%% declared reduction_order and claims bit_exact MUST attest it preserves that exact order
+%% (reduction_order_preserved/3) or this REFUSES to apply — the symbolic counterpart to the runtime
+%% 0-ULP gate, catching the serial-vs-block_row class of bug BEFORE the rewrite is committed. If
+%% numerical_stability isn't loaded, the gate is a no-op pass (substrate-honest: don't block when the
+%% checker is absent — but when present, it's enforced). "Construction makes correctness structural."
+apply_fusion_gated(InputFacts, fusion(Name, Ops, EqClass), OutputFacts,
+                   gate_obligation(Name, EqClass, Ops)) :-
+    fusion_reduction_precondition(fusion(Name, Ops, EqClass)),
+    apply_fusion_to_facts(InputFacts, fusion(Name, Ops, EqClass), OutputFacts).
+
+%% fusion_reduction_precondition(+Fusion): passes if numerical_stability is absent (no-op) OR the
+%% fusion clears the reduction-order gate. Prints the veto message on failure (vetoes are MAP).
+fusion_reduction_precondition(fusion(Name, Ops, EqClass)) :-
+    ( current_predicate(numerical_stability:fusion_reduction_gate/2)
+    -> ( numerical_stability:fusion_reduction_gate(fusion(Name, Ops, EqClass), EqClass)
+       -> true
+       ;  format("REFUSED [apply_fusion]: fusion ~w fails the reduction-order gate~n", [Name]), fail )
+    ;  true ).
+
+%% A bare obligation predicate so consumers (the gate runner) can pattern-match
+%% the verification contract for a fusion without re-running the rewrite.
+gate_obligation(Name, EqClass, Ops) :-
+    nonvar(Name), nonvar(EqClass), nonvar(Ops).
+
 
 %% ────────────────────────────────────────────────────────────────────
 %% apply_elementwise_chain_fusion/3
