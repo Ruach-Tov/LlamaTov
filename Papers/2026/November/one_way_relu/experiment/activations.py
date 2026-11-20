@@ -46,6 +46,32 @@ def one_way_leaky(x, alpha=0.01):
     return OneWayLeakyReLU.apply(x, alpha)
 
 
+class LeakyFwdGatedBwd(torch.autograd.Function):
+    """Heath's fourth corner (2026-11-18): forward LEAKY (negative side
+    transmits alpha*x), backward sign-gated like one-way (full g when
+    x>0; alpha*g on the inactive side ONLY in the revival direction;
+    suppression blocked). Completes the {fwd: strict,leaky} x
+    {bwd: standard,gated} square: relu=(strict,strict-bwd),
+    leaky=(leaky,leaky-bwd), oneway=(strict,gated), lwgate=(leaky,gated)."""
+
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.save_for_backward(x)
+        ctx.alpha = alpha
+        return torch.nn.functional.leaky_relu(x, alpha)
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        (x,) = ctx.saved_tensors
+        alive = (x > 0).to(grad_out.dtype)
+        revival = ((x <= 0) & (grad_out < 0)).to(grad_out.dtype)
+        return grad_out * (alive + ctx.alpha * revival), None
+
+
+def leaky_fwd_gated(x, alpha=0.01):
+    return LeakyFwdGatedBwd.apply(x, alpha)
+
+
 class StrictReLU(torch.autograd.Function):
     """Control arm pinned to the strict (x>0) backward mask — the documented
     kernel contract (relu doc section 6) — independent of any torch-internal
@@ -77,6 +103,8 @@ def make_activation(arm: str):
         return lambda x: torch.nn.functional.leaky_relu(x, alpha)
     if kind == 'oneway':
         return lambda x: one_way_leaky(x, alpha)
+    if kind == 'lwgate':
+        return lambda x: leaky_fwd_gated(x, alpha)
     raise ValueError(arm)
 
 

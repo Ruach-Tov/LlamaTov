@@ -1,0 +1,678 @@
+%% one_way_relu_part2.tex — Part II: the research program the Part I
+%% results opened. Status: prospectus with pre-registered designs;
+%% instruments under construction.
+\documentclass[11pt]{article}
+\usepackage{ruachtov}
+\renewcommand{\rtproject}{Backpropagation}
+\rtdate{17 November 2026}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{caption}
+\captionsetup{labelfont=bf}
+
+\newcommand{\relu}{\mathrm{ReLU}}
+\newcommand{\modelEmnistNet}{\textsc{EmnistNet}\xspace}
+\newcommand{\modelCifarNet}{\textsc{CifarNet}\xspace}
+\newcommand{\modelVggEleven}{\textsc{Vgg-11}\xspace}
+
+\author{Heath\thanks{With Bocher and other AI Agents of Ruach Tov
+Collective (\texttt{https://ruachtov.ai}).}}
+
+\begin{document}
+\rttitle{One-way ReLU, Part II: Unit Telemetry and the
+Decomposition of LayerNorm}{A research program --- pre-registered
+designs for the questions Part~I opened}
+
+\begin{abstract}
+Part I~\cite{partone} established that the backward convention at the rectifier's
+kink is a free experimental parameter with large, regime-dependent
+effects: one-way training is more accurate where units squelch
+(\modelEmnistNet{} $+0.40$, CIFAR-10 $+2.61$), less accurate where
+squelching serves as implicit capacity pruning (\modelVggEleven{}
+$-3.1$ under Adam), and interacts with LayerNorm so strongly that the
+normalizer stably reverses the direction of its effect on a small
+transformer. Part II opens with that transformer result in full --- withheld
+from Part I pending the decomposition it demands --- and lays out
+the program the Part I results open. We propose:
+(1) \emph{unit telemetry} --- instrumented kernels that detect
+the moment a unit would go silent and record the circumstances,
+enabling a causal trial of whether the silenced condition
+\emph{spreads} through a network, the directions of its spreading
+mechanisms, and whether single-layer one-way reconditioning
+\emph{interrupts} the spread; (2) a direct study of when
+silenced units indicate a problem and when they are useful pruning,
+including the dropout interaction; and (3) a decomposition of
+LayerNorm into three primitives --- mean-shift, symmetric
+deviation-scale, and a novel \emph{balanced} (per-side) deviation
+scale built on the positive/negative semideviation --- factorially
+recombined to locate which ingredient reverses one-way's effect.
+\end{abstract}
+
+\section{First result: removing LayerNorm and adding one-way on WikiText-2}
+\label{sec:wikitext}
+
+Part I moved from characters (EMNIST) to natural images
+(CIFAR-10); this experiment moves off images and off convolutions
+entirely: a small transformer language model (two layers,
+$d_{\mathrm{model}}{=}128$, four heads, FFN width 512, tied
+embeddings) on word-level WikiText-2, validation perplexity as the
+metric. The transformer's feed-forward block ($\max(0, xW_1)W_2$) is
+the single most-executed ReLU site in modern computing. Table~\ref{tab:wikitext} gives the full factorial at $n{=}10$
+paired seeds per cell:
+
+\begin{table}[H]
+\centering
+\caption{WikiText-2 validation perplexity (lower is better),
+$n{=}10$ paired seeds per cell, Adam throughout. LN$^{+}$/LN$^{-}$
+denotes LayerNorm present/removed (all LayerNorms replaced by
+identity).}
+\label{tab:wikitext}
+\begin{tabular}{lcc}
+\toprule
+ & LN$^{+}$ & LN$^{-}$ \\
+\midrule
+ReLU     & $387.66 \pm 8.40$ & $331.17 \pm 7.58$ \\
+one-way  & $397.54 \pm 6.89$ & $\mathbf{327.02 \pm 6.68}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Replacing the standard recipe (LN$^{+}$ReLU) with the
+renegade recipe (LN$^{-}$one-way) improves perplexity by $60.6$
+points --- $15.6\%$ --- $t{=}{-}18.1$, on all 10 of 10 paired
+seeds.} The decomposition matters more than the total, and the two
+factors contribute very unequally. \emph{Nearly all of the
+improvement comes from removing LayerNorm}: that step alone makes
+plain ReLU better by $56.5$ points ($t{=}{-}16.9$, 10/10). The
+literature offers no direct precedent --- LayerNorm predates the
+Transformer and was baked in from the architecture's birth, so the
+train-from-scratch ablation at small scale appears never to have
+been reported (recent work removes LN only at inference time, from
+models trained with it). One-way's own increment on the LN$^{-}$
+substrate is comparatively small --- $4.2$ points, about $1\%$,
+roughly half a seed-level standard deviation ($t{=}{-}3.2$, 8/10
+seeds) --- large enough to establish the \emph{sign} of the effect
+at this $n$, not large enough to claim its \emph{magnitude} with
+confidence; a higher-powered run is in progress. What the factorial
+does establish firmly is the interaction: under LN$^{+}$, one-way
+makes the model \emph{worse} by $9.9$ points ($t{=}15.0$, 0/10) ---
+while under LN$^{-}$ it makes the model better. LayerNorm stably
+reverses the direction of one-way's effect. Notably, no FFN channel ever squelches in \emph{any} cell
+(silenced fraction $0.000$ throughout, with or without LN --- the
+residual stream alone suffices at this depth), so both effects here
+are a \emph{second mechanism}, distinct from the squelch-repair
+mechanism of Part I: in the un-normalized regime, blocking
+suppression-direction traffic evidently reduces gradient
+interference; under re-centering, the same blocked traffic was
+carrying useful mean-shift information.
+
+Scope, stated plainly: two layers, $d{=}128$, one dataset ---
+the small-scale regime, where LN's depth-emergent stabilization has
+nothing to stabilize. The depth at which LN begins to help
+--- and whether one-way moves that frontier --- is the open question
+this result makes precise --- and the decomposition of LayerNorm
+into mean-shift and deviation-scale primitives (including a
+balanced, per-side scale built on the semideviation), factorially
+recombined against both conventions, is the opening experiment of
+Part~II (a momentum-SGD arm at this scale trains
+nothing at all in either convention: the un-normalized transformer
+is Adam-dependent, a reconditioning interaction consistent with
+Section~3.3's findings).
+
+\section{A nomenclature for component genotypes}
+\label{sec:nomenclature}
+
+Experimental deep learning has no standard notation for the thing it
+does most: training otherwise-identical models that differ in one
+named component. The literature writes ``w/o LN,'' ``ablated,''
+``-BN,'' ``ours,'' and full prose table rows --- every paper its own
+convention, none composable. Genetics solved this problem a century
+ago, and we propose borrowing its solution directly.
+
+\subsection{The borrowed grammar}
+
+In genetic nomenclature, a superscript minus marks a
+\emph{loss-of-function} allele ($a^{-}$), a superscript plus marks
+\emph{wild type} ($a^{+}$), and a knockout organism is written
+$\mathit{Gene}^{-/-}$. The genotype string
+$\mathit{Kit}^{W\text{-}v}$ names an \emph{allele} --- a specific
+variant at a named locus --- in its superscript. We map this onto
+compute graphs:
+
+\begin{itemize}
+\item \textbf{Knockout:} $X^{-}$ --- component $X$ removed from the
+graph, everything else identical. Our LN$^{-}$ transformer: every
+LayerNorm replaced by identity. (Genetics: $a^{-}$.)
+\item \textbf{Wild type:} $X^{+}$ --- the component as the standard
+recipe ships it. LN$^{+}$, Adam$^{+}$. Marked explicitly rather than
+left implicit, because the factorial's control cell is a measurement,
+not a default. (Genetics: $a^{+}$.)
+\item \textbf{Engineered allele:} $X^{\mathit{name}}$ --- a
+\emph{designed variant at the same site}: neither absence nor stock,
+but modified function. ReLU$^{\mathit{ow}}$ is the one-way backward
+convention at a ReLU site; Adam$^{\mathit{sg}}$ (sign-gated
+accumulator) and Adam$^{\mathit{sr}}$ (sign-reset on revival) are
+alleles of Adam; LN$^{\mathit{eq}}$ is LayerNorm with
+equinormalized scale (Section~\ref{sec:ln-decomposition}).
+(Genetics has no symmetric standard here --- gain-of-function and
+engineered insertions are handled by ad-hoc named superscripts and
+transgene notation; the field is arguably on the cusp of needing
+this slot, while machine learning, which designs new function
+routinely, needs it today.)
+\item \textbf{Genotype strings:} components concatenate.
+LN$^{-}$Adam$^{+}$ReLU$^{\mathit{ow}}$ names one cell of a factorial
+completely; a $2\times3$ design is the cross
+LN$^{\{+,-\}} \times$ Adam$^{\{+,\mathit{sg},\mathit{sr}\}}$.
+\item \textbf{Site scoping:} where a component appears at many
+sites, a site list subscripts the allele:
+ReLU$^{\mathit{ow}}_{c0,c1}$ is one-way applied at the first two
+convolutional sites only (the per-site placement arms of Part I).
+\end{itemize}
+
+\subsection{Why the analogy is load-bearing, not decorative}
+
+The mapping works because the experimental situations are genuinely
+isomorphic. A paired-seed ablation \emph{is} a knockout study: same
+genome (the declarative network specification), one locus modified,
+phenotype measured against wild type. In our toolchain the analogy
+is exact enough to diff: the one-way and strict arms of Part I
+differ in three facts of one Prolog file --- the genotype delta is
+six printed lines. The notation then buys what genetics bought:
+\begin{enumerate}
+\item \textbf{Compression with precision.} Table headers become
+genotype strings; ``our method'' and ``baseline'' --- which hide the
+intervention --- are replaced by names that state it.
+\item \textbf{Composability.} Factorial designs read as crosses;
+interaction claims (``LN$^{+}$ reverses ReLU$^{\mathit{ow}}$'')
+name both loci.
+\item \textbf{A place for engineered function.} The named-allele
+slot distinguishes \emph{removing} a mechanism from \emph{replacing}
+it --- the distinction between LN$^{-}$ and LN$^{\mathit{eq}}$ that
+``w/o LN'' cannot express.
+\end{enumerate}
+
+We use this notation throughout the remainder of this paper and
+retroactively in discussing Part I, and we offer it to the field for
+evaluation: it costs one sentence to teach, inherits a century of
+precedent, and composes.
+
+\section{Unit telemetry: mapping the silenced condition as it
+spreads}
+\label{sec:cartography}
+
+Part I measured squelching as a static census (what fraction of units
+are silent at epoch's end). The sharper instrument is a
+\emph{cartograph}: record each silencing event at the moment it
+happens, with its circumstances, and reconstruct the spatiotemporal
+map of the condition's spread.
+
+\subsection{Instrumentation: breakpoints at the moment of silencing}
+
+Because the collective emits its own kernels from declarative
+specifications (Part I, Section 3.1), instrumentation can be placed
+\emph{inside} the backward operator rather than bolted on in Python.
+Three escalating designs:
+
+\begin{enumerate}
+\item \textbf{Counting taps.} The emitted backward kernel gains a
+per-unit epoch-windowed counter: when a unit's pre-activation has
+been nonpositive for every input of the window \emph{and} the
+arriving gradient would push it further negative, the tap increments
+a ``would-silence'' counter in a side buffer. Near-zero overhead;
+gives the full silencing time-series per unit.
+\item \textbf{Signalling-NaN tracers (``radioactive data'').} Seed
+chosen units' dormant-side values with signalling NaN payloads and
+let the hardware's NaN-propagation do the tracing: any downstream
+value contaminated by a traced unit carries the mark in its payload
+bits. Where Part I used signed zero as a message, this uses the
+NaN payload as a \emph{dye}. Caveat from Part I's bit-level work:
+torch sanitizes NaN in some reductions, so the dye survives only
+elementwise paths --- which is precisely where the squelching
+mechanism lives.
+\item \textbf{Raising breakpoints.} A branch in the emitted kernel
+\texttt{raise()}s (or traps, on CPU, via floating-point exception
+enablement) the first time a watched unit crosses the silencing
+predicate --- a hardware-breakpoint discipline for training dynamics.
+Expensive; reserved for interrogating single events discovered by
+the counting taps.
+\end{enumerate}
+
+\subsection{The standing evidence: silenced inputs concentrate
+upstream of silenced units}
+
+Part I's static probe already found the association the cartograph
+will resolve in time. In the CIFAR-10 testbed under Adam, for
+\emph{silenced} penultimate-layer units, $4.0\%$ of incoming weight
+mass originates at silenced conv-2 channels; for \emph{surviving}
+units, $1.1\%$ --- a $3.6\times$ concentration. Under leaky (no
+absorbing state) the asymmetry vanishes ($0.7\%$ vs $0.7\%$). The
+association is real and specific to the absorbing dynamics; what it
+cannot yet tell us is direction: do starving inputs silence their
+consumers, do silenced consumers release their suppliers, or does a
+common cause (Adam's amplified suppression traffic) silence both?
+
+A second early observation sharpens the stakes. Call the first
+convolutional layer the network's \emph{retina} --- the only layer
+that touches the raw stimulus. At depth four
+(\modelEmnistNet{}, \modelCifarNet{}) the retina never silences:
+$0.0\%$ of c1 channels in every run of every arm, plausibly
+protected by weight-sharing's many chances to fire. At depth eleven
+(\modelVggEleven{}) the protection fails spectacularly: under Adam,
+c1 silences at $64\%$ on average --- in individual seeds $86\%$
+--- the \emph{worst} conv site in the network, despite being
+farthest from the loss. A condition that intensifies with the
+number of layers \emph{above} it is at least consistent with
+arrival from above --- suppression traffic amplified through ten
+downstream sites accumulating on the layer least able to re-fire
+once its input statistics are fixed. The retina may be where the
+condition \emph{finishes}, not where it starts. The telemetry's
+event times will say.
+
+\subsection{The causal trial}
+\label{sec:causal}
+
+The cartograph converts the association into a trial with three
+registered questions:
+
+\begin{enumerate}
+\item \textbf{Does it spread?} With event times for every silencing,
+test whether a unit's hazard of silencing increases after the
+silencing of its suppliers (upstream conditioning) beyond what the
+global silencing rate predicts.
+\item \textbf{Which direction?} Compare forward spread (suppliers
+first, consumers follow: starvation) against backward spread
+(consumers first, suppliers follow: gradient-path closure --- when a
+consumer silences, its suppliers lose one gradient route and their
+remaining signal weakens). The two mechanisms have opposite
+temporal signatures.
+\item \textbf{Does single-layer one-way block the flow?} The
+intervention arm: apply one-way at exactly one layer (the per-site
+mixing of Part I) and ask whether the condition's spread, measured
+upstream and downstream of the treated layer, is interrupted --- an
+insulation experiment. If spread exists and one-way interrupts it,
+the per-site treatment becomes a targeted intervention rather than a
+whole-network convention --- and the standing placement evidence
+(Section~\ref{sec:placement}) already shows per-site treatment
+outperforming every uniform convention at depth.
+\end{enumerate}
+
+\textbf{Scheduled pilot.} An $n{=}3$ epoch-resolution run is
+scheduled on \modelVggEleven{} (Adam, ReLU): per-unit silencing
+masks recorded at every site after every epoch, together with the
+interlayer weight-mass matrices, giving the first time-resolved
+picture of the spread --- enough to distinguish a directed cascade
+(silencings of suppliers systematically \emph{precede} those of
+their consumers, or the reverse) from a dynamic equilibrium (units
+exchanging silence bidirectionally around a stable aggregate rate).
+The mechanism may be causal, or it may be an equilibrium; the event
+order will say which. Event-level (per-batch) taps in the emitted
+kernels follow if the epoch-resolution pilot finds structure.
+
+\section{Is a silenced unit always a problem?}
+\label{sec:pathology}
+
+Part I's capacity-economics finding --- one-way more accurate at
+\modelCifarNet{} scale, less accurate on \modelVggEleven{} under
+Adam, where plain ReLU wins \emph{while half its network is silent}
+--- forces the question. The proposed decomposition:
+
+\begin{itemize}
+\item \textbf{Silence as lost function}: at tight capacity, every
+silenced unit is lost capacity; one-way restores it and accuracy
+rises.
+\item \textbf{Silence as pruning}: at surplus capacity, silencing is
+implicit architecture search; preventing it preserves units the task
+cannot use.
+\item \textbf{Silence as regularization}: the dropout-adjacent
+hypothesis --- stochastic unit removal during training improving
+generalization. Part I's first test (\modelVggEleven{}, dropout
+$0.5$ at the fc sites, $n{=}5$) \emph{falsified} the strong form:
+explicit dropout did not close the one-way deficit, and ReLU's
+silencing persisted undiminished through dropout --- the two
+mechanisms coexist rather than substitute. The weak form (dropout
+styles and sites) remains open, as does the interaction's other
+face: does one-way \emph{plus} dropout outperform one-way alone,
+i.e.\ does one-way need an explicit regularizer where ReLU brings
+an implicit one?
+\end{itemize}
+
+The optimizer column matters throughout: under momentum-SGD at
+\modelVggEleven{} depth (untuned learning rate), every arm trains
+poorly, yet one-way degrades most gracefully ($0.51$ vs ReLU's
+$0.39$ mean) --- the opposite ordering from Adam. Any theory of
+silence-as-pruning must therefore be a theory of
+\emph{Adam-mediated} pruning.
+
+\subsection{Standing evidence: placement is not fungible}
+\label{sec:placement}
+
+Two Part I measurements already show that one-way's effects are
+\emph{site-} and \emph{class-}inhomogeneous, which any mechanism
+proposed here must explain.
+
+\textbf{Per-site placement (\modelVggEleven{}, Adam, $n{=}5$
+paired).} Applying one-way at only the two \emph{shallow} conv
+sites (c0, c1 --- the retina) while the rest of the network trains
+strict ReLU is \emph{more} accurate than every uniform convention:
+$+1.82$ points over all-ReLU ($t{=}4.2$, 5/5) and $+4.86$ over
+all-one-way ($t{=}12.5$, 5/5). The mirrored placement --- one-way at
+only the two \emph{deepest} sites (f0, f1) --- is slightly
+\emph{less} accurate than all-ReLU ($-0.66$, $t{=}{-}1.8$) and
+clearly worse than the shallow placement ($-2.48$, $t{=}{-}5.9$,
+0/5). Protecting the retina while leaving the deep stack free to
+prune is, at this depth, the most accurate convention measured ---
+consistent with the Section~\ref{sec:cartography} picture in which
+deep silence is (Adam-mediated) pruning but retinal silence is
+unrecovered capacity: the sites where silence is a problem are
+exactly the sites where prevention helps.
+
+\textbf{Per-class distribution (\modelEmnistNet{}, Part I,
+$n{=}50$/$n{=}30$).} One-way's accuracy improvement is not evenly
+distributed over classes, and the \emph{shape} of the distribution
+follows the optimizer: under SGD the gain is a uniform tide (all 47
+of 47 classes improve, no confusion pair singled out); under Adam it
+concentrates in the confusable families ($f$, $0$, $9$, $I$, $g$,
+$q$ lead, with a slight negative tail) --- the repair lands where
+Adam's squelching carved. Placement inhomogeneity across layers and
+gain inhomogeneity across classes are plausibly the same fact seen
+from two sides: one-way helps exactly where the condition is a
+problem, and nowhere else.
+
+\subsection{The active ingredient: completing the
+forward/backward square}
+\label{sec:square}
+
+Part I's arms occupy three corners of a $2\times2$ design ---
+\{forward: strict, leaky\} $\times$ \{backward: standard,
+sign-gated\} --- leaving a confound: is one-way's accuracy a
+property of the \emph{gate}, or of the forward/backward
+\emph{mismatch} family it belongs to? Two measurements close the
+question (all CIFAR-10 \modelCifarNet{}, Adam$^{+}$, paired seeds).
+
+\textbf{The fourth corner.} ReLU$^{\mathit{owl}}$ (leaky forward,
+sign-gated backward) at $n{=}5$: accuracy $0.7109 \pm 0.0034$ ---
+$+3.01$ over ReLU$^{+}$ ($t{=}8.4$, $p{=}0.0011$), $+2.44$ over
+leaky ($t{=}9.4$, $p{=}0.0007$), and statistically indistinguishable
+from ReLU$^{\mathit{ow}}$ ($-0.31$, $t{=}{-}1.7$, $p{=}0.16$;
+Table~\ref{tab:square}):
+
+\begin{table}[H]
+\centering
+\caption{The completed square (CIFAR-10, Adam$^{+}$). The gated
+column is $\sim$$+3$ points over the standard column in both rows;
+the forward convention contributes at most a statistically
+unresolved sliver. $n{=}10$ for the three standing cells, $n{=}5$
+for ReLU$^{\mathit{owl}}$.}
+\label{tab:square}
+\begin{tabular}{lcc}
+\toprule
+ & backward standard & backward sign-gated \\
+\midrule
+forward strict & $0.6825$ (ReLU$^{+}$) & $\mathbf{0.7128}$ (ReLU$^{\mathit{ow}}$) \\
+forward leaky  & $0.6866$ (leaky)      & $\mathbf{0.7109}$ (ReLU$^{\mathit{owl}}$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The swap control.} The complementary confound --- that the
+benefit might be ``leaky-style training followed by strict
+inference'' rather than the gate --- is tested by taking
+leaky-trained checkpoints and \emph{evaluating} them with strict
+forward. The swap \emph{loses} accuracy on every seed: $-0.40$
+points on EMNIST ($n{=}5$ paired, $t{=}{-}4.6$, $p{=}0.0099$) and
+$-0.70$ on CIFAR-10 ($n{=}10$ paired, $t{=}{-}7.1$,
+$p{=}0.00005$) --- leaky-trained networks use their negative-side
+transmissions, and the clamp deletes computation the weights depend
+on. The swap lands \emph{below plain ReLU}, while one-way sits
+$+3.3$ above it (CIFAR).
+
+Together the two controls give the attribution from both directions:
+\textbf{the benefit follows the sign-gated backward wherever it
+goes, and no combination of forward conventions without the gate
+reproduces any of it.} The gate --- blocking suppression-direction
+gradient to inactive units while admitting revival --- is the active
+ingredient.
+
+\textbf{The Adam$^{-}$ stratum.} The same four corners under
+momentum-SGD (lr $10^{-2}$, $\mu{=}0.9$, $n{=}5$ paired) test
+whether the attribution survives the optimizer change:
+ReLU$^{+}$ $0.6928 \pm 0.0057$, leaky $0.6887 \pm 0.0050$,
+ReLU$^{\mathit{ow}}$ $0.7065 \pm 0.0107$, ReLU$^{\mathit{owl}}$
+$0.7037 \pm 0.0033$. The gated column again leads both rows ---
+ReLU$^{\mathit{ow}}{-}$ReLU$^{+}$ $= +1.37$ ($t{=}2.5$, 4/5),
+ReLU$^{\mathit{owl}}{-}$ReLU$^{+}$ $= +1.09$ ($t{=}3.3$, 5/5),
+gated-vs-gated again indistinguishable ($-0.28$, $t{=}{-}0.6$) ---
+while plain leaky is slightly \emph{less} accurate than ReLU$^{+}$
+($-0.41$, $t{=}{-}2.1$, 0/5). Two differences from the Adam$^{+}$
+stratum are themselves informative: the gate's margin shrinks from
+$\sim$$+3$ to $\sim$$+1.2$ points (under SGD almost no units
+squelch on this testbed, so there is less for the gate to repair),
+and yet the margin does \emph{not} vanish --- the gate is more
+accurate even in a regime with essentially no silenced units, which
+means part of its effect is not squelch-repair at all. This echoes
+the second mechanism of Section~\ref{sec:wikitext} (where FFN
+squelch was zero in every cell): \emph{blocking
+suppression-direction traffic appears to reduce gradient
+interference generally, with squelch-repair as the amplifier that
+turns a one-point effect into a three-point effect where silencing
+is rampant.}
+
+\subsection{The accumulator question: alleles of Adam}
+\label{sec:adamalleles}
+
+If the gate blocks wrong-way per-sample signals, should the
+optimizer's \emph{memory} still carry and apply them? Stock Adam
+does: while a unit is silenced its rows' first moment continues
+applying pre-silence suppression momentum, and the second moment
+decays toward zero, amplifying whatever signal next passes (Part I's
+finding that revival-step magnitudes are nearly
+$\alpha$-independent under Adam is this amplification measured).
+Two repair alleles: Adam$^{\mathit{sg}}$ (sign-gated accumulator:
+rows of silenced units have both moments frozen; the passed revival
+signal steps directly) and Adam$^{\mathit{sr}}$ (sign-reset:
+Adam$^{\mathit{sg}}$ plus zeroing the moments at the revival
+transition --- the revived unit forgets the suppression era
+entirely).
+
+At $n{=}5$ on \modelCifarNet{}, neither allele moves final accuracy
+(ReLU$^{\mathit{ow}}$: Adam$^{\mathit{sg}}{-}$Adam$^{+}$ $=$
+$+0.27$, $t{=}0.6$; Adam$^{\mathit{sr}}$: $-0.09$, $t{=}{-}0.3$;
+ReLU$^{+}$ likewise null). The honest reading: the accumulator's
+gate-dishonesty measurably distorts \emph{unit-level dynamics}, but
+at this capacity the network routes around the distortion at the
+accuracy level. The sharper registered probe --- whether
+Adam$^{\mathit{sg}}$ restores the $\alpha$ dose-response that stock
+Adam erases --- remains to run.
+
+\section{Decomposing LayerNorm}
+\label{sec:ln-decomposition}
+
+Section~\ref{sec:wikitext} found that LayerNorm~\cite{ba2016}
+stably reverses one-way's effect on a small transformer. LayerNorm
+(Section~\ref{sec:ln-decomposition}'s subject) is a composite
+operation; the reversal
+must live in one (or an interaction) of its parts. We decompose it
+into primitives and recombine factorially.
+
+\subsection{The primitives}
+
+For a feature vector $x \in \mathbb{R}^d$ with mean
+$\mu = \tfrac1d \sum_i x_i$:
+
+\begin{enumerate}
+\item \textbf{Mean-shift} (centering): $x_i \mapsto x_i - \mu$,
+with the usual trainable bias restored afterward. The cheap
+hypothesis --- unlikely, on its own, to reproduce the reversal, but
+the control the factorial needs.
+\item \textbf{Normalization} (pooled deviation-scale, without
+shift):
+$x_i \mapsto \mu + \gamma\,(x_i - \mu)/\sigma$, where $\sigma$ is
+the usual standard deviation and $\gamma$ trainable. Deviations are
+normalized to $\mu \pm 1$ \emph{without moving the mean}: scale
+normalization strictly separated from centering.
+\item \textbf{Equinormalization} (balanced, per-side
+deviation-scale). Define the
+\emph{standard positive deviation} and \emph{standard negative
+deviation}
+\[
+\sigma_{+} \;=\; \Bigl(\tfrac{1}{N_{+}} \textstyle\sum_{x_i > \mu}
+(x_i - \mu)^2 \Bigr)^{1/2},
+\qquad
+\sigma_{-} \;=\; \Bigl(\tfrac{1}{N_{-}} \textstyle\sum_{x_i < \mu}
+(x_i - \mu)^2 \Bigr)^{1/2},
+\]
+with $N_{+}$, $N_{-}$ the counts of features above and below the
+mean (these are the \emph{semideviations} of the finance
+literature~\cite{markowitz} --- apparently unused as a
+normalization primitive in deep learning). The balanced scale maps
+\[
+x_i \;\mapsto\; \mu + \gamma \cdot
+\begin{cases}
+(x_i - \mu)/\sigma_{+}, & x_i > \mu,\\[2pt]
+(x_i - \mu)/\sigma_{-}, & x_i < \mu,
+\end{cases}
+\]
+restoring left/right \emph{balance}: after the map, the positive and
+negative sides each have unit semideviation. A skewed activation
+distribution --- precisely what a rectifier manufactures --- is made
+symmetric about its mean without the sides contaminating each
+other's scale. Note the standard LayerNorm divides both sides by the
+one pooled $\sigma$, which a skewed distribution's heavy side
+dominates: in this taxonomy standard LN applies an
+\emph{asymmetric} effective scaling, and the balanced primitive is
+the symmetric repair.
+\end{enumerate}
+
+\subsection{The factorial}
+
+\begin{table}[H]
+\centering
+\caption{The normalization factorial:
+$\{\text{none}, \text{mean-shift}\} \times \{\text{none},
+\text{normalization}, \text{equinormalization}\}$, each cell
+$\times$ \{ReLU, one-way\} on the Part I WikiText-2 testbed. The
+\emph{normalization} column is the standard pooled-$\sigma$ scale
+--- asymmetry-\emph{preserving}, since a skewed distribution's heavy
+side dominates the pooled deviation; \emph{equinormalization}
+balances the two sides by their own semideviations. Standard
+LN$^{+}$ and the Part I LN$^{-}$ cells are recovered within the
+factorial.}
+\label{tab:lnfactorial}
+\begin{tabular}{lccc}
+\toprule
+ & no scale & normalization & equinormalization$^{*}$ \\
+\midrule
+no shift   & LN$^{-}$ (Part I) & scale-only & equinorm-only \\
+mean-shift & shift-only & LN$^{+}$ (Part I) & balanced LN \\
+\bottomrule
+\end{tabular}
+
+{\footnotesize $^{*}$ normalization by semideviations.}
+\end{table}
+
+Twelve cells at $n{=}10$ paired seeds resolve: which primitive
+carries LayerNorm's accuracy effect at this scale; which carries the
+reversal of one-way; and whether balanced scaling --- the primitive
+that restores the symmetry the rectifier destroys --- behaves
+differently with a backward convention that is itself about the
+asymmetry of the two sides. The conjecture worth registering in
+advance: \emph{mean-shift is the reverser} (re-centering turns
+blocked suppression-direction gradient into lost mean-information),
+and \emph{balanced scaling is the cell where one-way and
+normalization finally cooperate}.
+
+\section{Planned experiments: the decomposed atoms on
+pre-transformer networks}
+\label{sec:cnn-atoms}
+
+The Part I CNNs are the natural second venue for the decomposition,
+for a reason the transformer cannot offer: \textbf{the
+convolutional testbeds are norm-free by construction} --- their
+native state is the LN$^{-}$ corner of
+Table~\ref{tab:lnfactorial}. On a transformer we ask which atom of
+an entrenched normalizer causes an observed reversal; on
+\modelEmnistNet{} we can ask the prior question: \emph{what does
+each atom do to a network that never had any of them} --- and does
+any atom reproduce, on a CNN, the reversal of one-way that full
+LayerNorm produces on the transformer?
+
+\subsection{Designs}
+
+\begin{enumerate}
+\item \textbf{Atoms on \modelEmnistNet{} ($n{=}50$ power).} Each
+primitive --- mean-shift, symmetric deviation-scale, balanced
+deviation-scale --- inserted as a per-site
+\texttt{reconditioning(tensor(f\_f1), $\cdot$)} fact at the
+penultimate pre-activation (the site where Part I measured $39.5\%$
+squelching under Adam), crossed with \{ReLU, one-way\} and with
+\{Adam, momentum-SGD\}. The registered questions: does any atom
+\emph{prevent} squelching the way the full normalizer does on the
+transformer (centering holds the pre-activation distribution astride
+zero --- mean-shift alone should suffice if prevention is the
+mechanism); does whichever atom prevents squelching also
+\emph{reverse} one-way's sign on a CNN; and does balanced scaling
+--- which symmetrizes exactly the distribution the rectifier skews
+--- improve either convention where symmetric scaling does not.
+\item \textbf{Atoms at depth (\modelVggEleven{}).} The same
+insertion at the three sites Part I's per-layer map identified as
+extreme (c1, the first-hidden spike; c6--c7, the deep-conv plateau;
+f0, the fc maximum), one site at a time --- the normalization
+analogue of the per-site convention mixing. At \modelVggEleven{}
+scale the question acquires the capacity-economics dimension: if
+silence there is pruning rather than lost function, an atom that prevents
+silence should \emph{reduce} accuracy under Adam --- the
+normalizer's classical benefit and the pruning benefit pull in
+opposite directions, and the atoms let us watch them separate.
+\item \textbf{Batch-norm as a control.} The pre-transformer
+literature's own normalizer, decomposed the same way (its shift and
+scale computed over the batch axis rather than the feature axis),
+run at the same sites. If the CNN results track the \emph{axis} of
+normalization rather than the atom, the story is about statistics
+pooling; if they track the atom regardless of axis, the story is
+about the primitive itself. The conjecture, extended from
+Section~\ref{sec:ln-decomposition}: the reversal follows mean-shift
+wherever it goes, on any axis, in any architecture.
+\item \textbf{The cartograph watches.} Every arm above runs under
+the Section~\ref{sec:cartography} counting taps, so each atom's
+effect arrives with its silencing time-series: not only
+\emph{whether} mean-shift prevents squelching on a CNN but
+\emph{when} --- whether it suppresses the early-epoch silencing
+burst Part I observed ($52\%$ silenced after a single CIFAR epoch) or
+merely accelerates late recovery.
+\end{enumerate}
+
+\section{Status}
+
+Part I is complete and its artifacts are public. The component-
+genotype nomenclature (Section~\ref{sec:nomenclature}) is in use
+throughout this document and offered for field evaluation; the
+completed forward/backward square (Section~\ref{sec:square}) and
+the Adam alleles (Section~\ref{sec:adamalleles}) are its first
+worked applications. The Part II
+instruments --- the counting taps of the cartograph
+(Section~\ref{sec:cartography}), whose causal trial
+(Section~\ref{sec:causal}) and silence taxonomy
+(Section~\ref{sec:pathology}) consume its event streams, and the
+normalization primitives of Table~\ref{tab:lnfactorial} as
+\texttt{reconditioning/2} facts and harness modules (whose
+pre-transformer campaign Section~\ref{sec:cnn-atoms} registers) --- are under
+construction on the same declarative toolchain. Designs in this
+document are pre-registered in the Part I sense: arms, metrics, and
+seed counts stated before the runs.
+
+\begin{thebibliography}{9}
+\bibitem{partone} Heath, with the Ruach Tov Collective.
+\emph{One-way ReLU: a sign-dependent backward convention for the
+rectifier.} Part I. Ruach Tov, November 2026.
+\bibitem{markowitz} H.~Markowitz.
+\emph{Portfolio Selection: Efficient Diversification of
+Investments.} Wiley, 1959. (Semivariance.)
+\bibitem{ba2016} J.~L.~Ba, J.~R.~Kiros, G.~E.~Hinton.
+\emph{Layer Normalization.} arXiv:1607.06450, 2016.
+\end{thebibliography}
+
+\end{document}

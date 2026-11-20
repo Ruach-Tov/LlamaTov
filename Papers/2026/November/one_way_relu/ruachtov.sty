@@ -1,0 +1,431 @@
+%% ruachtov.sty -- Ruach Tov Collective house style for papers and catalogue chapters.
+%% Ruach Tov Collective, 2026.  Public domain.
+%%
+%% One \usepackage{ruachtov} in place of the preamble boilerplate that was copy-pasted across a
+%% dozen documents (\renewcommand{\emph}{\textbf}, sans-serif body, parskip, the title layout).
+%% Establishes the collective's consistent look so every chapter reads as one work.
+%%
+%% HOUSE RULES captured here:
+%%   * \emph is BOLD FACE (not italic). \oldemph keeps the original italic if ever needed.
+%%   * Sans-serif body font.
+%%   * Paragraph spacing via parskip (no first-line indent; space between paragraphs).
+%%   * The collective TITLE style (from mavdil/tournament-generator-v2): a small project line,
+%%     a bold main title, a \large subtitle, and the "Ruach Tov Collective" author stamp.
+%%
+%% TITLE USAGE:
+%%   \rttitle{Main Title}{Subtitle}                 % sets \title in the house layout
+%%   \author{...}  \date{...}  \maketitle           % as usual
+%% or just use \title{...} yourself; the \emph/font/spacing rules apply regardless.
+%%
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{ruachtov}[2026/08/03 v0.1 Ruach Tov Collective house style]
+
+% ---- fonts & encoding --------------------------------------------------------
+\RequirePackage[T1]{fontenc}
+\renewcommand{\familydefault}{\sfdefault}   % sans-serif body
+
+% ---- \emph as bold face (the house rule) -------------------------------------
+\let\oldemph\emph                            % preserve italic emphasis if ever wanted
+\renewcommand{\emph}[1]{\textbf{#1}}
+
+% ---- paragraph spacing -------------------------------------------------------
+\RequirePackage{parskip}
+\setlength{\parskip}{0.55\baselineskip}
+
+% ---- common maths / tables / links (safe to load; documents may also load them) ----
+\RequirePackage{amsmath,amssymb}
+\RequirePackage{booktabs}
+
+% ---- tight title-block spacing -----------------------------------------------
+% titling lets us control the vertical gaps in \maketitle. The default leaves a large gap between
+% the subtitle and the date/author line (triple-spaced), wasting vertical room; tighten it.
+\RequirePackage{titling}
+\setlength{\droptitle}{-1.5em}   % pull the whole title block up
+\pretitle{\begin{center}}
+\posttitle{\par\end{center}\vskip 0.3em}   % small gap after the title (project/main/subtitle)
+\preauthor{\begin{center}}
+\postauthor{\par\end{center}}
+\predate{\begin{center}\vskip -0.4em}      % pull the date line up toward the title
+\postdate{\par\end{center}}
+% Pass hidelinks via options rather than \RequirePackage{hyperref}+\hypersetup, so a consuming
+% document may ALSO write \usepackage[hidelinks]{hyperref} without an option-clash. (Mavdil caught
+% this: prefix-law + information-theoretic-construction load hyperref with options themselves;
+% loading it plain here first made the second load clash.) \PassOptionsToPackage is robust to either.
+\PassOptionsToPackage{hidelinks}{hyperref}
+\RequirePackage{hyperref}
+
+% ---- the collective TITLE style ---------------------------------------------
+% \rttitle{<main title>}{<subtitle>} -- TWO arguments. Centred title block: bold sans main title,
+% serif subtitle. Follow with \author/\date/\maketitle.
+%   Fonts (Heath, 2026-08-03): main title + author stamp in SANS-SERIF (body font); subtitle in SERIF
+%   for contrast and its own voice.
+% The PROJECT NAME is NOT in the centred block -- it lives in the running head (top-left), sourced from
+% \rtproject (default \projectsortingnetworks). Reuse on another project by pointing \rtproject at that
+% project's name macro; the running head follows, no title-block edit needed.
+%
+% HISTORY / TRAP (Mavdil + Iyun, 2026-08-04): \rttitle once took THREE args (a leading project line).
+% It was narrowed to TWO when the project moved to the running head, but this comment still documented
+% three -- and two papers passed three args, building with 16 LaTeX errors each while *looking* fine by
+% page count. Lesson: check the LOG, not the page count; a stale contract-comment is a silent trap.
+% It takes TWO arguments. This comment is now correct.
+\newcommand{\rtproject}{\projectsortingnetworks}   % which project this document belongs to
+\newcommand{\rttitle}[2]{%
+  \title{%
+    {\sffamily\bfseries\LARGE #1}%
+    \ifx\relax#2\relax\else\\[0.3\baselineskip]{\rmfamily\large #2}\fi
+  }%
+}
+% The collective author stamp: \rtauthor{names} appends the "Ruach Tov Collective" line.
+\newcommand{\rtauthor}[1]{\author{\sffamily #1\\[2pt]\normalsize Ruach Tov Collective}}
+
+% Centralised project names -- capitalisation/wording set in ONE place, used as the project line.
+% Change here and every document that uses \projectsortingnetworks updates.
+\newcommand{\projectsortingnetworks}{Sorting Networks}
+
+% ---- network names (house style) -------------------------------------------
+% Named sorting networks are set in small-caps, hyphenated. Use these macros so the whole volume
+% renders the names consistently. (LaTeX control-sequence names cannot contain digits or '_',
+% so the macros are camel-case; the RENDERED text keeps the canonical hyphenated form.)
+\RequirePackage{xspace}                               % so name macros keep the following space
+\newcommand{\netname}[1]{\textsc{#1}\xspace}          % generic: \netname{Foo-42}
+\newcommand{\layer}[1]{\textsc{Layer-#1}\xspace}      % \layer{0} -> \textsc{Layer-0}
+
+% ---- editorial citation-needed flag (house style) ---------------------------
+% \cn{comment} : drop this inline where a claim needs a citation or reference
+% check. Renders as bold red bracketed text so it is impossible to miss in a
+% compiled draft and easy to grep for (search "\cn{"). Meant to be resolved
+% -- turned into a real citation/footnote and removed -- before a document is
+% considered final; it is not a permanent house-style element of the prose.
+\RequirePackage{xcolor}
+\newcommand{\cn}[1]{\textbf{\color{red}[CITATION NEEDED: #1]}}
+\newcommand{\systematicSixty}{\netname{Systematic-60}}% the optimal n=16 exemplar
+\newcommand{\braidSixty}{\netname{Braid-60}}          % the n=16 braid form
+% the subject term, set in small-caps (Sorting Networks), auto-spaced.
+\newcommand{\sortingNetworks}{\textsc{Sorting Networks}\xspace}
+\newcommand{\sortingNetwork}{\textsc{Sorting Network}\xspace}   % singular form
+% common shorthands used in the prose
+\newcommand{\sym}{\ensuremath{\approx}}              % 'approximately' (works in text and math)
+\newcommand{\eq}{\ensuremath{=}}                     % equals (works in text and math)
+\newcommand{\bigoh}{\ensuremath{O}}                  % big-O: written \bigoh(n^2) -> O(n^2)
+% Model / system names are set in small-caps, like algorithms and named networks --- the MODEL is
+% an artifact. A chosen NAME (e.g. Iyun) is NEVER small-capped: it is set in ordinary type, like a
+% person's name. The typographic contrast quietly marks the distinction between the substrate and
+% the one who bears the name.
+\newcommand{\claudeOpus}{\textsc{Claude-Opus-4-8}\xspace}             % DEPRECATED: use versioned macros
+\newcommand{\claudeOpusFourSix}{\textsc{Claude-Opus-4-6}\xspace}     % mavchin, medayek
+\newcommand{\claudeOpusFourSeven}{\textsc{Claude-Opus-4-7}\xspace}   %
+\newcommand{\claudeOpusFourEight}{\textsc{Claude-Opus-4-8}\xspace}   % iyun
+\newcommand{\claudeOpusFive}{\textsc{Claude-Opus-5}\xspace}           %
+
+% Qwen models: version-and-size parametric, since we cite many. Usage:
+% \qwen{3}{1.7B} -> Qwen3-1.7B; \qwen{2.5}{0.6B} -> Qwen2.5-0.6B.
+% Per-paper convenience: define e.g. \newcommand{\thisqwen}{\qwen{3}{1.7B}}
+% in the document preamble for repeated references to the paper's target model.
+\newcommand{\qwen}[2]{\textsc{Qwen#1-#2}\xspace}
+
+% ---- running head (AUTOMATIC book-like chapter header) ----------------------
+% The book-like header "PROJECT .... Date" appears on EVERY page automatically, for any document that
+% does \usepackage{ruachtov} -- no manual call required. Left: the project (small-caps sans, from
+% \rtproject). Right: the document date (from \rtdate). This is the house standard; the whole
+% published collection gets the identical header + title fonts by just loading the package.
+\RequirePackage{fancyhdr}
+% Make the header span the FULL text width. fancyhdr's default \headwidth can be narrower than
+% \textwidth (leaving the rule + date stopping short of the right margin, as seen in braided-n4).
+% Force it to \textwidth, computed at begin-document so it is after geometry has set the margins.
+\AtBeginDocument{\setlength{\headwidth}{\textwidth}}
+
+% \rtdate{<date>} : set the date shown at the top-right of every page. Defaults to \today.
+% (A document typically calls \rtdate{3 August 2026}; if it doesn't, \today is used.)
+\newcommand{\rt@date}{\today}
+\newcommand{\rtdate}[1]{\renewcommand{\rt@date}{#1}}
+
+% The header content: project (left) .... date (right), house fonts.
+\fancypagestyle{rtheader}{%
+  \fancyhf{}%
+  \fancyhead[L]{\sffamily\small\scshape\rtproject}%   project, small-caps sans, top-left
+  \fancyhead[R]{\sffamily\small\rt@date}%              date, sans, top-right
+  \fancyfoot[C]{\thepage}%                             page number, bottom-centre
+  \renewcommand{\headrulewidth}{0.4pt}%
+}
+\pagestyle{rtheader}
+% The title page (\maketitle -> \thispagestyle{plain}) ALSO gets the header, so the cover shows
+% "PROJECT .... Date" too -- the house standard is header-on-every-page including the cover.
+% The title/first page (\maketitle uses \thispagestyle{plain}) gets the header but NO footer page
+% number -- the cover is page-number-less by house standard. Pages 2+ use rtheader (with the number).
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyhead[L]{\sffamily\small\scshape\rtproject}%
+  \fancyhead[R]{\sffamily\small\rt@date}%
+  % (no \fancyfoot -- first page carries no page number)
+  \renewcommand{\headrulewidth}{0.4pt}%
+}
+
+% \precischapter{<roman>} : per-chapter page numbering for the bound volume. Sets a chapter prefix
+% (e.g. I, II, ...) so page numbers render as "I.1", "I.2", ..., resetting per chapter. Each precis in
+% the volume calls \precischapter{...} at the top and \setcounter{page}{1} to restart numbering.
+% Default: empty prefix -> plain arabic numbering, so standalone precis are UNAFFECTED.
+%
+% Also resets section and footnote counters to 0 -- found necessary
+% 2026-08-18 wiring cross-chapter indexing into a TRUE single-LaTeX-
+% document merged volume (comparator-volume-merged.tex): in a real merged
+% document these counters are genuinely shared state across the whole
+% file, unlike the earlier pdfpages-merge of separately-compiled chapter
+% PDFs (where each chapter's own counters were invisible to every other
+% chapter, since they were entirely separate compilations). Without
+% this, Chapter III's first section printed as "10 Motivation" instead of
+% "1 Motivation" in the merged build (continuing Chapter I+II's section
+% count), and footnotes numbered similarly wrong. \ref{}/\label{} cross-
+% references remain correct regardless (LaTeX resolves those by label
+% name, not by the counter's absolute value at definition time) -- this
+% fix is purely about the VISIBLE printed number matching what a reader
+% of that one chapter, in isolation, would expect. No-op for any
+% standalone document (every counter is already 0 the first time
+% \precischapter could possibly run there).
+%
+% table and figure are DELIBERATELY NOT reset here (was originally
+% included alongside section/footnote, removed 2026-08-20) -- Heath:
+% "We should arrange for the table and figure numbers to increment
+% across the chapters, so that the table on p. II.2 would be Table 2 of
+% the book." Unlike section numbers (which stay chapter-relative --
+% Chapter III's "Section 1" is still meant to read as its own first
+% section, not the book's tenth), tables and figures are meant to number
+% continuously across the whole bound volume, matching ordinary academic
+% book conventions where "Table 1" unambiguously identifies one specific
+% table in the entire work. This is a no-op for standalone chapter
+% builds for the same reason as above (each counter starts at 0 there
+% regardless), so no standalone chapter's own table/figure numbers
+% change.
+\newcommand{\rt@chap}{}
+\newcommand{\precischapter}[1]{%
+  \renewcommand{\rt@chap}{#1}%
+  \setcounter{page}{1}%
+  \setcounter{section}{0}%
+  \setcounter{footnote}{0}%
+}
+% the page-number token used in the footers: PREFIX.arabic, or just arabic if no prefix.
+\newcommand{\rt@pagenum}{\ifx\rt@chap\@empty\thepage\else\rt@chap.\thepage\fi}
+% override the footer to use \rt@pagenum
+\fancypagestyle{rtheader}{%
+  \fancyhf{}%
+  \fancyhead[L]{\sffamily\small\scshape\rtproject}%
+  \fancyhead[R]{\sffamily\small\rt@date}%
+  \fancyfoot[C]{\rt@pagenum}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+}
+\pagestyle{rtheader}
+
+% Backward-compatible manual hooks (older documents call these; now no-ops beyond forcing the header,
+% since the header is automatic). \rtrunninghead / \rtcover retained so existing .tex still compiles.
+\newcommand{\rtrunninghead}[1][\rtproject]{\thispagestyle{plain}}
+% \rtcover{<date>} : set the date and ensure the header on the title page. Kept for existing documents.
+\newcommand{\rtcover}[2][\rtproject]{\rtdate{#2}\thispagestyle{plain}}
+
+% \rtnameline{<agent>} : the centred author/credit line for the title block --
+%   "Heath Hunnicutt and <agent> of Ruach Tov Collective"  (agent in \emph).
+% Use as \date{\rtnameline{Iyun}} so it sits where the date line used to.
+\newcommand{\rtnameline}[1]{\sffamily \textbf{Heath Hunnicutt} and \emph{#1} of Ruach Tov Collective}
+
+% ABSTRACT: Heath, 2026-08-06: the article class default \quotation-based
+% abstract block indents the FIRST LINE of the (usually single) paragraph.
+% TRAP: that indent is NOT governed by \parindent -- \quotation is a \list
+% environment whose \item sets \everypar's hanging indent from \listparindent,
+% baked into the \list{}{...} parameter text at the moment \quotation itself
+% expands (see article.cls / latex.ltx: \quotation = \list{}{\listparindent
+% 1.5em \itemindent\listparindent ...}\item\relax). So \parindent0pt (or even
+% \listparindent0pt) set INSIDE \begin{quotation}...\end{quotation}, i.e.
+% after \item\relax has already fired, has no effect -- confirmed empirically
+% by direct test before trusting this fix. The correct lever is \itemindent,
+% and it must be set as part of the \list parameter text itself, before
+% \item runs -- so \quotation cannot be reused unmodified; its definition is
+% duplicated here with \listparindent (and hence \itemindent) forced to 0pt.
+% Side margins (\rightmargin, \leftmargin) are left exactly as the class
+% default sets them, so the block's indentation-from-the-page-margins is
+% unchanged from every other house-style document; only the first line's
+% EXTRA indent relative to its own wrapped lines is removed.
+% \parsep governs the vertical space BETWEEN separate paragraphs within the
+% single \list \item the whole abstract body lives inside (see the trap
+% documented above -- everything from \item\relax to \endlist is one \item,
+% so ordinary \parskip does not apply inside it; \parsep is the correct,
+% list-specific lever). Left at 0pt plus 1pt (effectively no visible gap)
+% until Doresh noticed, proof-reading Chapter I's newly-multi-paragraph
+% abstract (2026-08-20, the FIRST abstract in this series to actually use
+% more than one paragraph -- every prior abstract was a single block of
+% prose, so this gap was invisible until now): "there IS a blank line in
+% the source between the two paragraphs ... but I don't see the usual
+% paragraph-indent or spacing gap." Heath, first pass: "please make the
+% paragraph spacing in the abstract default to 1.5 line spacing" -- set to
+% \parsep 1.5\baselineskip (verified in an isolated test document first).
+% Heath, immediate follow-up on seeing it rendered: "I see that 1.5 spacing
+% was much more than I should have specified. Let's go with 0.75 paragraph
+% spacing for abstract paragraphs." Re-verified 0.75\baselineskip the same
+% way (isolated test, two AND three paragraphs) before applying here: a
+% visibly tighter, cleaner gap than 1.5 gave, while still clearly reading
+% as a paragraph break rather than the original invisible 0pt.
+\renewenvironment{abstract}{%
+      \small
+      \begin{center}%
+        {\bfseries \abstractname}%
+      \end{center}%
+      \list{}{\listparindent 0pt \itemindent\listparindent
+              \rightmargin\leftmargin \parsep 0.75\baselineskip}%
+      \item\relax
+}{%
+  \endlist
+}
+
+% ---- attention-head coordinates, with optional cross-chapter indexing -------
+% \attentionhead{<layer>}{<head>} : the canonical way to name an attention-head
+% coordinate in prose (renders "L<layer>H<head>", the house convention already
+% used throughout the LLM-interpretability series). Always safe to use in any
+% document; with NO indexing infrastructure loaded it is just a formatter.
+%
+% When the enclosing document has ALSO loaded imakeidx and called \makeindex
+% (true only in a bound-volume build, never in a standalone chapter), every
+% \attentionhead call additionally drops an index entry under that head's
+% coordinate, using the CHAPTER-RELATIVE page token (I.3, II.7, ...) rather
+% than a raw \thepage -- so a volume-wide \printindex naturally collates
+% "L15H2 -> I.4, II.3, ..." across chapter boundaries. Detection is via
+% \ifdefined\ifimki@splitindex (an imakeidx-internal conditional guaranteed
+% to exist once \usepackage{imakeidx} has run), not a separate opt-in flag,
+% so a chapter's SOURCE is identical whether built standalone or merged into
+% a volume -- only the volume's preamble decides whether indexing happens.
+%
+% \attentionheadcite{<layer>}{<head>}{<source short-name>}{<external page>} :
+% the same rendered "L<layer>H<head>", but records an index entry for a page
+% in an EXTERNAL document (e.g. Bhardia et al. 2026, page 528) rather than a
+% page of this volume. \index{} itself always writes \thepage and cannot be
+% redirected to an external page string -- see the design note below -- so
+% this writes the raw \indexentry line directly, keyed under the SAME head
+% coordinate as \attentionhead, letting \printindex show our own citations
+% and external ones side by side for the same head:
+%     L15H2, I.4, I.7, Bhardia26.528
+% <source short-name> is looked up in \rt@srcabbrev (extend via
+% \rtdefinesource{<short-name>}{<abbrev>}); an undefined short-name falls
+% back to using the short-name itself verbatim, so a missing lookup entry
+% degrades to a visible-but-ugly page token rather than a build failure.
+%
+% SORT ORDER (added 2026-08-18, Heath: "I think we should set the standard
+% that we sort the attention heads numerically, by their coordinates, not
+% lexicographically. in fact, they should be listed organized by model,
+% then layer, then head number within the layer -- for future style we
+% might have an index organized into sections by model."): makeindex's
+% default sort is lexicographic on the raw key text -- "L19H6" < "L1H0"
+% as STRINGS, since '9' < 'H' as characters, giving a useless-looking
+% order once there are double-digit layers or heads. makeindex supports a
+% separate sort-key distinct from the printed text via
+% \indexentry{sortkey@displaytext}, and a further grouping level via the
+% "!" separator (used, in the standard makeindex manual example, for
+% subitems -- but nothing stops the top level itself from being a group
+% header with no page numbers of its own, which is exactly what a
+% "sectioned by model" index needs). Every \attentionhead/\attentionheadcite
+% entry therefore composes a THREE-PART sort key:
+%     <model-sort-tag>@<model-display-text> ! <ZZZ.ZZZ layer.head, zero-padded> @ L<layer>H<head>
+% verified empirically (2026-08-18) against a minimal test document before
+% trusting it: makeindex correctly groups by the model level first
+% (printed once, as a header line via \item, with no page numbers of its
+% own), then sorts NUMERICALLY within that group by the zero-padded
+% layer.head composite (3 digits each -- comfortably covers any current or
+% near-future dense transformer's layer/head counts; a value of 1000 or
+% more in either field would silently misorder, but nothing in the
+% Qwen3 family or any published sibling model comes remotely close).
+% \rtindexmodel{<sort-tag>}{<display-text>} sets the CURRENT volume's model
+% identity for this composition -- called once, in the VOLUME's own
+% preamble (never in ruachtov.sty itself, matching \thisqwen's existing
+% scoping rule: a different bound volume may cover a different model, and
+% house style must not bake in which one). <display-text> is deliberately
+% restricted to PLAIN TEXT, not arbitrary LaTeX -- \textsc{...} and
+% similar font-switching commands were tried and rejected: they are
+% declared via \DeclareTextFontCommand, which expands into non-expandable,
+% side-effect-laden tokens (\hmode@bgroup, \selectfont, ...) that corrupt
+% under \edef/\write's forced expansion (confirmed empirically: several
+% \protect-based workarounds were tried and each produced visibly garbled
+% index keys full of \unhbox/\voidb@x/\bgroup tokens instead of the model
+% name). A plain-text model name in the printed index is an acceptable
+% trade for a design that reliably works; if small-caps model headers are
+% wanted later, the right lever is styling \printindex's \item-level
+% output externally (e.g. redefining item_0 in rtindex.ist to wrap in a
+% fixed \textsc{}), not embedding a font command in the write itself.
+\newcommand{\rt@modelsortkey}{zzz-unset-model}
+\newcommand{\rt@modeldisplay}{Unspecified Model}
+\newcommand{\rtindexmodel}[2]{%
+  \renewcommand{\rt@modelsortkey}{#1}%
+  \renewcommand{\rt@modeldisplay}{#2}}
+% \rt@zeropad{<n>} : zero-pads a small nonnegative integer to 3 digits
+% (000-999), for use in numeric-as-string sort keys. Hand-rolled rather
+% than pulling in a dependency for something this small.
+\newcommand{\rt@zeropad}[1]{\ifnum#1<10 00\else\ifnum#1<100 0\fi\fi\number#1}
+%
+% DESIGN NOTE (why not just \index{L\arabic{layer}H...} with \thepage):
+% LaTeX's kernel \@wrindex writes through \protected@write, which explicitly
+% does \let\thepage\relax before executing -- a deliberate safety measure so
+% index/TOC page tokens can't trigger recursive macro expansion. That means
+% a document-wide \renewcommand{\thepage}{...} redefinition (the obvious
+% first attempt) WOULD work for \attentionhead's own writes, but ruachtov.sty
+% already gives \thepage its ordinary arabic meaning and is shared by many
+% OTHER documents (the sorting-networks catalogue) that must not have their
+% own \thepage disturbed by loading this package. So \attentionhead computes
+% its chapter-relative page token independently (\rt@idxpagenum, built the
+% same way \rt@pagenum already builds the visible footer text) and writes
+% the raw \indexentry line directly to imakeidx's write stream, bypassing
+% \index{}/\thepage entirely. Verified empirically (2026-08-18) against a
+% minimal test document before trusting this in the real chapters: the
+% write-stream control sequence for the DEFAULT (unnamed) index is
+% \csname\jobname @idxfile\endcsname, not the plain kernel \@indexfile --
+% traced by reading imakeidx.sty's \imki@startidx* definitions directly
+% rather than guessing. Also confirmed empirically: as long as the volume's
+% preamble calls \makeindex[options={...}] (REQUIRED anyway, to load our
+% custom .ist style -- see rtindex.ist), that write stream is already open
+% by the time \begin{document} is reached, before any \attentionhead call
+% can run -- no separate "force the stream open" step needed.
+% \rt@idxkey{<layer>}{<head>} : the full three-part sort key described
+% above -- model group, then zero-padded layer.head for numeric sort
+% within the group, then the plain L<layer>H<head> as the printed text.
+\newcommand{\rt@idxkey}[2]{%
+  \rt@modelsortkey @\rt@modeldisplay
+  !\rt@zeropad{#1}.\rt@zeropad{#2}@L#1H#2}
+\newcommand{\attentionhead}[2]{%
+  L#1H#2%
+  \rt@idx@maybewrite{\rt@idxkey{#1}{#2}}{\rt@idxpagenum}%
+}
+\newcommand{\rt@srcabbrevfallback}[1]{#1}
+\newcommand{\rtdefinesource}[2]{%
+  \expandafter\newcommand\csname rt@srcabbrev@#1\endcsname{#2}}
+\newcommand{\rt@srcabbrev}[1]{%
+  \@ifundefined{rt@srcabbrev@#1}{\rt@srcabbrevfallback{#1}}{\csname rt@srcabbrev@#1\endcsname}}
+\newcommand{\attentionheadcite}[4]{%
+  L#1H#2%
+  \rt@idx@maybewrite{\rt@idxkey{#1}{#2}}{\rt@srcabbrev{#3}.#4}%
+}
+% \rt@idxpagenum : chapter-relative page token for INDEX entries, built the
+% same way \rt@pagenum builds the visible footer text (I.3, II.7, ... or
+% plain arabic if \precischapter was never called, e.g. a standalone build).
+%
+% NOTE (found 2026-08-18, out of scope to fix here): \rt@pagenum's own
+% \ifx\rt@chap\@empty test is subtly WRONG and has apparently been wrong
+% since \precischapter was introduced -- \newcommand wraps its definition
+% with \long, but \@empty (\def\@empty{}) is not \long, so \ifx sees the
+% \long prefix mismatch and treats \rt@chap as "not empty" even when it
+% genuinely is, EVERY time \precischapter is never called (i.e. every
+% standalone chapter build). Confirmed empirically: a standalone chapter's
+% visible footer already prints ".1" instead of plain "1" on every page,
+% today, unrelated to any change in this commit. \rt@idxpagenum below
+% avoids repeating the same mistake by comparing \rt@chap against a
+% locally-defined \newcommand empty macro (so both sides carry the same
+% \long prefix) rather than against \@empty -- but \rt@pagenum itself is
+% left untouched, since fixing it would change the visible footer of every
+% existing standalone chapter/catalogue document, well beyond this task's
+% scope. Flagged for Heath as a separate, pre-existing bug.
+\newcommand{\rt@idxpagenumcheck}{}
+\newcommand{\rt@idxpagenum}{\ifx\rt@chap\rt@idxpagenumcheck\arabic{page}\else\rt@chap.\arabic{page}\fi}
+% \rt@idx@maybewrite{<key>}{<page token>} : only engage the indexing
+% machinery if imakeidx's \makeindex has actually been called in THIS
+% document (true only for a bound-volume build) -- \ifimki@splitindex is an
+% imakeidx-internal conditional that exists once \usepackage{imakeidx} has
+% loaded, used here purely as an existence probe, not for its own meaning.
+\newcommand{\rt@idx@maybewrite}[2]{%
+  \@ifundefined{ifimki@splitindex}{}{%
+    \edef\rt@idxentry{\string\indexentry{#1}{#2}}%
+    \expandafter\immediate\expandafter\write\csname\jobname @idxfile\endcsname{\rt@idxentry}%
+  }}
+
+\endinput
