@@ -169,8 +169,9 @@ completely; a $2\times3$ design is the cross
 LN$^{\{+,-\}} \times$ Adam$^{\{+,\mathit{sg},\mathit{sr}\}}$.
 \item \textbf{Site scoping:} where a component appears at many
 sites, a site list subscripts the allele:
-ReLU$^{\mathit{ow}}_{c0,c1}$ is one-way applied at the first two
-convolutional sites only (the per-site placement arms of Part I).
+ReLU$^{\mathit{ow}}_{c1,c2}$ is one-way applied at the first two
+convolutional sites only (1-indexed from the input; the per-site
+placement arms of Part I).
 \end{itemize}
 
 \subsection{Why the analogy is load-bearing, not decorative}
@@ -257,14 +258,21 @@ common cause (Adam's amplified suppression traffic) silence both?
 
 A second early observation sharpens the stakes. Call the first
 convolutional layer the network's \emph{retina} --- the only layer
-that touches the raw stimulus. At depth four
-(\modelEmnistNet{}, \modelCifarNet{}) the retina never silences:
-$0.0\%$ of c1 channels in every run of every arm, plausibly
-protected by weight-sharing's many chances to fire. At depth eleven
-(\modelVggEleven{}) the protection fails spectacularly: under Adam,
-c1 silences at $64\%$ on average --- in individual seeds $86\%$
---- the \emph{worst} conv site in the network, despite being
-farthest from the loss. A condition that intensifies with the
+that touches the raw stimulus. (Layer numbering convention,
+standardized here and throughout: conv sites are numbered
+c1, c2, \ldots{} \emph{from the input}, 1-indexed, matching the
+\texttt{op/4} facts of Part I Listing 1; \modelVggEleven{} has
+conv sites c1--c8 followed by fc sites f1--f2. The experiment
+harness's internal 0-indexed site names are mapped accordingly in
+the published analysis scripts.) At depth four (\modelEmnistNet{},
+\modelCifarNet{}) the retina never silences: $0.0\%$ of c1
+channels in every run of every arm, plausibly protected by
+weight-sharing's many chances to fire. At depth eleven
+(\modelVggEleven{}) the retina c1 itself also never silences ---
+but the protection ends there: \emph{c2, the second convolution},
+silences at $64\%$ on average --- in individual seeds $86\%$ ---
+among the worst conv sites in the network, despite being second
+from the stimulus. A condition that intensifies with the
 number of layers \emph{above} it is at least consistent with
 arrival from above --- suppression traffic amplified through ten
 downstream sites accumulating on the layer least able to re-fire
@@ -356,11 +364,14 @@ proposed here must explain.
 
 \textbf{Per-site placement (\modelVggEleven{}, Adam, $n{=}5$
 paired).} Applying one-way at only the two \emph{shallow} conv
-sites (c0, c1 --- the retina) while the rest of the network trains
-strict ReLU is \emph{more} accurate than every uniform convention:
+sites (c1, c2 --- the retina and its immediate consumer; harness
+arm \texttt{mix:c0,c1} in 0-indexed internal names) while the rest
+of the network trains strict ReLU is \emph{more} accurate than
+every uniform convention:
 $+1.82$ points over all-ReLU ($t{=}4.2$, 5/5) and $+4.86$ over
 all-one-way ($t{=}12.5$, 5/5). The mirrored placement --- one-way at
-only the two \emph{deepest} sites (f0, f1) --- is slightly
+only the two \emph{deepest} sites (f1, f2 --- harness
+\texttt{mix:f0,f1}) --- is slightly
 \emph{less} accurate than all-ReLU ($-0.66$, $t{=}{-}1.8$) and
 clearly worse than the shallow placement ($-2.48$, $t{=}{-}5.9$,
 0/5). Protecting the retina while leaving the deep stack free to
@@ -619,8 +630,8 @@ mechanism); does whichever atom prevents squelching also
 --- improve either convention where symmetric scaling does not.
 \item \textbf{Atoms at depth (\modelVggEleven{}).} The same
 insertion at the three sites Part I's per-layer map identified as
-extreme (c1, the first-hidden spike; c6--c7, the deep-conv plateau;
-f0, the fc maximum), one site at a time --- the normalization
+extreme (c2, the near-input spike; c7--c8, the deep-conv plateau;
+f1, the fc maximum --- 1-indexed), one site at a time --- the normalization
 analogue of the per-site convention mixing. At \modelVggEleven{}
 scale the question acquires the capacity-economics dimension: if
 silence there is pruning rather than lost function, an atom that prevents
